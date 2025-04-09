@@ -9,7 +9,7 @@ import { Building, LayoutDashboard, Users, Home, LogOut, Menu, X } from "lucide-
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 interface DashboardLayoutProps {
   children: React.ReactNode
 }
@@ -118,8 +118,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Button>
                 )}
               </div>
-              <div className="flex items-center">
+              <div className="flex items-center space-x-4">
                 <span className="text-sm font-medium">Head Office Admin</span>
+                <ThemeToggle />
               </div>
             </div>
           </div>
