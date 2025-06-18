@@ -3,12 +3,25 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Footer } from "@/components/ui/footer";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import DashboardLayout from "@/components/dashboard-layout";
-import { Plus, Edit, ChevronRight, ChevronDown } from "lucide-react";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { Plus, Edit, ChevronRight, ChevronDown, Info } from "lucide-react";
+import { Search, Filter, UserPlus, DollarSign, Download } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+
+import Link from "next/link";
 import {
   Dialog,
   DialogContent,
@@ -26,34 +39,115 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+interface RentAdjustment {
+  type: string;
+  percentage: number;
+  amount: number;
+  description: string;
+}
+
+interface AdjustmentBreakdown {
+  adjustments: RentAdjustment[];
+  totalAdjustmentPercentage: number;
+  totalAdjustmentAmount: number;
+}
+
+interface RentDetail {
+  month: string;
+  baseRent: number;
+  finalAmount: number;
+  adjustmentBreakdown: AdjustmentBreakdown;
+  isPaid: boolean;
+}
+
+interface CurrentMonthRent {
+  baseRent: number;
+  finalAmount: number;
+  adjustments: AdjustmentBreakdown;
+  isPaid: boolean;
+  calculation: string;
+}
+
+interface Renter {
+  id: string;
+  username: string;
+}
+
 interface Property {
-  _id: string;
+  propertyId: string;
   address: string;
   currentRent: number;
-  paymentStatus: string;
-  paymentAmount: number;
+  totalPending: number;
+  renter?: Renter;
+  currentMonthRent: CurrentMonthRent;
+  rentDetails: RentDetail[];
+}
+
+interface APIRenter {
+  _id: string;
+  username: string;
+  email?: string;
+  phone?: string;
+}
+
+interface GlobalAdjustment {
+  id: string;
+  type: string;
+  percentage: number;
+  effectiveFrom: string;
 }
 
 interface Subordinate {
-  _id: string;
+  subordinateId: string;
   username: string;
-  role: string;
   properties: Property[];
   subordinates: Subordinate[];
+  email?: string;
+  phone?: string;
 }
 
-interface HierarchyData {
-  _id: string;
-  username: string;
-  role: string;
-  properties: Property[];
-  subordinates: Subordinate[];
+interface HierarchyResponse {
+  globalAdjustments: GlobalAdjustment[];
+  hierarchy: Subordinate[];
 }
 
 export default function HierarchyPage() {
-  const [hierarchyData, setHierarchyData] = useState<HierarchyData | null>(
-    null
-  );
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [renters, setRenters] = useState<APIRenter[]>([]);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [isAddPropertyDialogOpen, setIsAddPropertyDialogOpen] = useState(false);
+  const [isAssignRenterDialogOpen, setIsAssignRenterDialogOpen] =
+    useState(false);
+  const [isChangeRentDialogOpen, setIsChangeRentDialogOpen] = useState(false);
+  const [isRegisterRenterDialogOpen, setIsRegisterRenterDialogOpen] =
+    useState(false);
+
+  const [propertyFormData, setPropertyFormData] = useState({
+    address: "",
+    currentRent: "",
+    currentManager: "",
+  });
+  const [renterFormData, setRenterFormData] = useState({
+    username: "",
+    email: "",
+    phone: "",
+    role: "renter",
+  });
+  const [assignRenterData, setAssignRenterData] = useState({
+    renterId: "",
+    propertyId: "",
+  });
+  const [changeRentData, setChangeRentData] = useState({
+    propertyId: "",
+    newRent: "",
+  });
+
+  const [hierarchyData, setHierarchyData] = useState<Subordinate[]>([]);
+  const [globalAdjustments, setGlobalAdjustments] = useState<
+    GlobalAdjustment[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>(
     {}
@@ -69,21 +163,81 @@ export default function HierarchyPage() {
     password: "",
     role: "subordinate",
     parentId: "",
+    fullName: "", // Add this new field
   });
-  const [propertyFormData, setPropertyFormData] = useState({
-    address: "",
-    currentRent: "",
-    currentManager: "",
-  });
+
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(
+    null
+  );
+  const [isPropertyEditDialogOpen, setIsPropertyEditDialogOpen] =
+    useState(false);
+
+  // New state to track dialog type
+  const [dialogType, setDialogType] = useState<"both" | "subordinate">("both");
+
   const { toast } = useToast();
 
+  // Store user ID in state to avoid direct localStorage access during prerendering
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      setUserId(user._id || null);
+    }
+  }, []);
+  const handleOpenPropertyEditDialog = async (property: Property) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found");
+      }
+
+      setSelectedProperty(property);
+
+      // Set initial values for changeRentData
+      setChangeRentData({
+        propertyId: property.propertyId,
+        newRent: "",
+      });
+
+      // Set initial values for assignRenterData
+      setAssignRenterData({
+        propertyId: property.propertyId,
+        renterId: property.renter?.id || "",
+      });
+
+      // Fetch renters
+      const response = await fetch(
+        "https://renter-app-f0fc.onrender.com/api/users/all-renters",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch renters");
+      }
+
+      const rentersData = await response.json();
+      setRenters(rentersData);
+
+      setIsPropertyEditDialogOpen(true);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to fetch renters",
+        variant: "destructive",
+      });
+    }
+  };
   const handleAddSubordinateTwo = async () => {
     try {
       const token = localStorage.getItem("token");
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
-      const parentId = user._id;
-
-      if (!token || !parentId) {
+      if (!token || !userId) {
         throw new Error("Authentication token or user ID not found");
       }
 
@@ -93,7 +247,8 @@ export default function HierarchyPage() {
         phone: subordinateFormData.phone,
         password: subordinateFormData.password,
         role: "subordinate",
-        parentId: parentId,
+        parentId: userId,
+        fullName: subordinateFormData.fullName, // Add this line
       };
 
       const response = await fetch(
@@ -126,18 +281,14 @@ export default function HierarchyPage() {
         password: "",
         role: "subordinate",
         parentId: "",
+        fullName: "", // Reset this field as well
       });
 
-      const updatedResponse = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/hierarchy",
-        {
-          headers: { Authorization: `${token}` },
-        }
-      );
-      if (updatedResponse.ok) {
-        const updatedData = await updatedResponse.json();
-        setHierarchyData(updatedData);
-      }
+      // Refresh hierarchy data
+      fetchHierarchyData();
+
+      // Close the dialog
+      setIsAddDialogOpen(false);
     } catch (error) {
       toast({
         title: "Error",
@@ -148,20 +299,104 @@ export default function HierarchyPage() {
     }
   };
 
+  // Function to export hierarchy data to CSV
+  const exportHierarchyToCSV = () => {
+    try {
+      // Prepare headers for CSV
+      const headers = [
+        "Manager Name",
+        "Property Address",
+        "Assigned To",
+        "Base Rent",
+        "Current Month Rent",
+        "Total Pending",
+        "Status",
+      ];
+
+      // Process hierarchy data into flat array for CSV
+      const rows: string[][] = [];
+
+      const processSubordinate = (subordinate: Subordinate, level = 0) => {
+        // Process each property under this subordinate
+        subordinate.properties.forEach((property) => {
+          rows.push([
+            subordinate.username,
+            property.address,
+            property.renter?.username || "—",
+            property.currentRent.toString(),
+            property.currentMonthRent.finalAmount.toString(),
+            property.totalPending.toString(),
+            property.currentMonthRent.isPaid ? "Paid" : "Unpaid",
+          ]);
+        });
+
+        // Process nested subordinates recursively
+        subordinate.subordinates.forEach((sub) =>
+          processSubordinate(sub, level + 1)
+        );
+      };
+
+      // Process all hierarchy data
+      hierarchyData.forEach((subordinate) => processSubordinate(subordinate));
+
+      // If no data found
+      if (rows.length === 0) {
+        toast({
+          title: "Nothing to export",
+          description: "No property data found to export",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Convert to CSV format
+      const csvContent = [
+        headers.join(","),
+        ...rows.map((row) =>
+          row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(",")
+        ),
+      ].join("\n");
+
+      // Create download link
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute(
+        "download",
+        `property_report_${new Date().toISOString().split("T")[0]}.csv`
+      );
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Export successful",
+        description: `${rows.length} properties exported to CSV`,
+        variant: "default",
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description:
+          error instanceof Error ? error.message : "Failed to export data",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleAddPropertyTwo = async () => {
     try {
       const token = localStorage.getItem("token");
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
-      const currentManager = user._id;
-
-      if (!token || !currentManager) {
+      if (!token || !userId) {
         throw new Error("Authentication token or user ID not found");
       }
 
       const payload = {
         address: propertyFormData.address,
         currentRent: Number(propertyFormData.currentRent),
-        currentManager: currentManager,
+        currentManager: userId,
       };
 
       const response = await fetch(
@@ -193,16 +428,11 @@ export default function HierarchyPage() {
         currentManager: "",
       });
 
-      const updatedResponse = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/hierarchy",
-        {
-          headers: { Authorization: `${token}` },
-        }
-      );
-      if (updatedResponse.ok) {
-        const updatedData = await updatedResponse.json();
-        setHierarchyData(updatedData);
-      }
+      // Refresh hierarchy data
+      fetchHierarchyData();
+
+      // Close the dialog
+      setIsAddDialogOpen(false);
     } catch (error) {
       toast({
         title: "Error",
@@ -225,6 +455,7 @@ export default function HierarchyPage() {
         password: subordinateFormData.password,
         role: "subordinate",
         parentId: subordinateFormData.parentId,
+        fullName: subordinateFormData.fullName, // Add this line
       };
 
       const response = await fetch(
@@ -257,18 +488,14 @@ export default function HierarchyPage() {
         password: "",
         role: "subordinate",
         parentId: "",
+        fullName: "", // Reset this field as well
       });
 
-      const updatedResponse = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/hierarchy",
-        {
-          headers: { Authorization: `${token}` },
-        }
-      );
-      if (updatedResponse.ok) {
-        const updatedData = await updatedResponse.json();
-        setHierarchyData(updatedData);
-      }
+      // Refresh hierarchy data
+      fetchHierarchyData();
+
+      // Close the dialog
+      setIsAddDialogOpen(false);
     } catch (error) {
       toast({
         title: "Error",
@@ -319,16 +546,11 @@ export default function HierarchyPage() {
         currentManager: "",
       });
 
-      const updatedResponse = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/hierarchy",
-        {
-          headers: { Authorization: `${token}` },
-        }
-      );
-      if (updatedResponse.ok) {
-        const updatedData = await updatedResponse.json();
-        setHierarchyData(updatedData);
-      }
+      // Refresh hierarchy data
+      fetchHierarchyData();
+
+      // Close the dialog
+      setIsAddDialogOpen(false);
     } catch (error) {
       toast({
         title: "Error",
@@ -339,36 +561,292 @@ export default function HierarchyPage() {
     }
   };
 
-  useEffect(() => {
-    const fetchHierarchyData = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) throw new Error("Authentication token not found");
+  const fetchHierarchyData = async () => {
+    try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      if (!token) throw new Error("Authentication token not found");
 
-        const response = await fetch(
-          "https://renter-app-f0fc.onrender.com/api/users/hierarchy",
-          {
-            headers: { Authorization: `${token}` },
-          }
-        );
+      const response = await fetch(
+        "https://renter-app-f0fc.onrender.com/api/users/hierarchy/per-month",
+        {
+          headers: { Authorization: `${token}` },
+        }
+      );
 
-        if (!response.ok) throw new Error("Failed to fetch hierarchy data");
-        const data = await response.json();
-        setHierarchyData(data);
-      } catch (error) {
-        toast({
-          title: "Error",
-          description:
-            error instanceof Error
-              ? error.message
-              : "Failed to fetch hierarchy data",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
+      if (!response.ok) throw new Error("Failed to fetch hierarchy data");
+      const data: HierarchyResponse = await response.json();
+      setHierarchyData(data.hierarchy);
+      setGlobalAdjustments(data.globalAdjustments);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch hierarchy data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenAssignRenterDialog = async (property: Property) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found");
       }
-    };
 
+      const response = await fetch(
+        "https://renter-app-f0fc.onrender.com/api/users/all-renters",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch renters");
+      }
+
+      const rentersData = await response.json();
+      setRenters(rentersData);
+
+      setSelectedProperty(property);
+      setAssignRenterData({
+        propertyId: property.propertyId,
+        renterId: "",
+      });
+      setIsAssignRenterDialogOpen(true);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to fetch renters",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAssignRenter = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found");
+      }
+
+      // Show loading toast
+      const loadingToast = toast({
+        title: "Processing",
+        description: "Assigning renter to property...",
+        variant: "default",
+      });
+
+      const response = await fetch(
+        `https://renter-app-f0fc.onrender.com/api/properties/assign-renter/${assignRenterData.propertyId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ newRenterId: assignRenterData.renterId }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to assign renter");
+      }
+
+      // Find the assigned renter's name for better feedback
+      const assignedRenter = renters.find(
+        (r) => r._id === assignRenterData.renterId
+      );
+      const renterName = assignedRenter?.username || "New renter";
+
+      // Update hierarchyData in real-time
+      setHierarchyData((prev) => {
+        // Create a deep copy of the hierarchy data
+        const updatedHierarchy = JSON.parse(JSON.stringify(prev));
+
+        // Helper function to find and update the property in the hierarchy
+        const updatePropertyInHierarchy = (nodes) => {
+          for (const node of nodes) {
+            // Check properties in this node
+            for (let i = 0; i < node.properties.length; i++) {
+              if (
+                node.properties[i].propertyId === assignRenterData.propertyId
+              ) {
+                // Update the property with new renter info
+                node.properties[i].renter = {
+                  id: assignRenterData.renterId,
+                  username: renterName,
+                };
+                return true;
+              }
+            }
+
+            // Check in subordinates recursively
+            if (node.subordinates.length > 0) {
+              if (updatePropertyInHierarchy(node.subordinates)) {
+                return true;
+              }
+            }
+          }
+          return false;
+        };
+
+        updatePropertyInHierarchy(updatedHierarchy);
+        return updatedHierarchy;
+      });
+
+      // Success toast with specific details
+      toast({
+        title: "Success",
+        description: `Renter "${renterName}" successfully assigned to property`,
+        variant: "default",
+      });
+
+      // Close the dialog
+      setIsPropertyEditDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to assign renter",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleChangeRent = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found");
+      }
+
+      if (!selectedProperty?.propertyId || !changeRentData.newRent) {
+        throw new Error("Property ID or new rent amount is missing");
+      }
+
+      // Make sure the rent is a positive number
+      const newRentValue = Number(changeRentData.newRent);
+      if (isNaN(newRentValue) || newRentValue <= 0) {
+        throw new Error("Rent amount must be a positive number");
+      }
+
+      const response = await fetch(
+        `https://renter-app-f0fc.onrender.com/api/properties/${selectedProperty.propertyId}/rent`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ newRent: newRentValue }),
+        }
+      );
+
+      if (!response.ok) {
+        // Try to get detailed error from response
+        let errorMessage = "Failed to update rent";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          // If parsing fails, use status text
+          errorMessage = `Error: ${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      // Get the updated property data if available
+      const updatedData = await response.json();
+
+      toast({
+        title: "Success",
+        description: "Rent updated successfully",
+        variant: "default",
+      });
+
+      // Refresh hierarchy data to show updated values
+      fetchHierarchyData();
+
+      // Close the dialog
+      setIsPropertyEditDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to update rent",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRegisterRenter = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found");
+      }
+
+      const response = await fetch(
+        "https://renter-app-f0fc.onrender.com/api/users/register-renter",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(renterFormData),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to register renter");
+      }
+
+      const newRenterData = await response.json();
+
+      toast({
+        title: "Success",
+        description: "Renter registered successfully",
+      });
+
+      const newRenter: APIRenter = {
+        _id: newRenterData._id,
+        username: newRenterData.username,
+        email: newRenterData.email,
+        phone: newRenterData.phone,
+      };
+      setRenters([...renters, newRenter]);
+
+      setRenterFormData({
+        username: "",
+        email: "",
+        phone: "",
+        role: "renter",
+      });
+
+      setIsRegisterRenterDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to register renter",
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
     fetchHierarchyData();
   }, [toast]);
 
@@ -384,11 +862,7 @@ export default function HierarchyPage() {
     const processSubordinate = (sub: Subordinate) => {
       sub.properties.forEach((prop) => {
         totalProperties++;
-        if (prop.paymentStatus === "paid") {
-          totalCollected += prop.paymentAmount;
-        } else {
-          totalDue += prop.paymentAmount;
-        }
+        totalDue += prop.totalPending;
       });
       sub.subordinates.forEach(processSubordinate);
     };
@@ -397,12 +871,125 @@ export default function HierarchyPage() {
     return { totalDue, totalCollected, totalProperties };
   };
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+    });
+  };
+
+  const PropertyTable = ({
+    properties,
+    onEdit,
+  }: {
+    properties: Property[];
+    onEdit: (property: Property) => void;
+  }) => (
+    <div className="overflow-x-auto mt-2 mb-4">
+      <table className="min-w-full bg-white dark:bg-gray-800 rounded shadow">
+        <thead>
+          <tr>
+            <th className="px-4 py-2 text-left">Property Name</th>
+            <th className="px-4 py-2 text-left">Assigned to</th>
+            <th className="px-4 py-2 text-left">Base Rent</th>
+            <th className="px-4 py-2 text-left">This Month</th>
+            <th className="px-4 py-2 text-left">Total Pending</th>
+            <th className="px-4 py-2 text-left">Status</th>
+            <th className="px-4 py-2 text-left">Edit Property</th>
+          </tr>
+        </thead>
+        <tbody>
+          {properties.map((property) => (
+            <tr key={property.propertyId}>
+              <td className="px-4 py-2">
+                <Link
+                  href={`/property/${property.propertyId}`}
+                  className="text-blue-500 hover:underline cursor-pointer"
+                >
+                  {property.address}
+                </Link>
+              </td>
+              <td className="px-4 py-2">{property.renter?.username || "—"}</td>
+              <td className="px-4 py-2">₹{property.currentRent}</td>
+              <td className="px-4 py-2">
+                <div className="flex items-center">
+                  <span className="font-medium">
+                    ₹{property.currentMonthRent.finalAmount}
+                  </span>
+                  {property.currentMonthRent.adjustments.totalAdjustmentAmount >
+                    0 && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <Info className="h-4 w-4 ml-1.5 text-blue-500" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <div className="space-y-1 text-xs">
+                            <p>{property.currentMonthRent.calculation}</p>
+                            <div>
+                              {property.currentMonthRent.adjustments.adjustments.map(
+                                (adj, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex justify-between"
+                                  >
+                                    <span>{adj.type}:</span>
+                                    <span>{adj.percentage}%</span>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
+              </td>
+              <td className="px-4 py-2">
+                <span className="text-red-500">₹{property.totalPending}</span>
+              </td>
+              <td className="px-4 py-2">
+                {property.currentMonthRent.isPaid ? (
+                  <Badge
+                    variant="outline"
+                    className="bg-green-100 text-green-800 border-green-200 hover:bg-green-200"
+                  >
+                    Paid
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="bg-red-100 text-red-800 border-red-200 hover:bg-red-200"
+                  >
+                    Unpaid
+                  </Badge>
+                )}
+              </td>
+              <td className="px-4 py-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onEdit(property)}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
   const renderHierarchyTree = (node: Subordinate, level = 0) => {
-    const isExpanded = expandedNodes[node._id];
-    const { totalDue, totalCollected } = calculateRentStats(node);
+    const isExpanded = expandedNodes[node.subordinateId];
+    const { totalDue } = calculateRentStats(node);
 
     return (
-      <div key={node._id} className="mb-2">
+      <div key={node.subordinateId} className="mb-2">
         <div
           className={`p-4 rounded-md ${
             level === 0
@@ -416,7 +1003,7 @@ export default function HierarchyPage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => toggleNode(node._id)}
+                onClick={() => toggleNode(node.subordinateId)}
                 className="mr-2"
               >
                 {isExpanded ? (
@@ -428,25 +1015,25 @@ export default function HierarchyPage() {
             )}
             <div>
               <h3 className="font-medium">{node.username}</h3>
-              <p className="text-xs text-muted-foreground">{node.role}</p>
+              <p className="text-xs text-muted-foreground">subordinate</p>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="text-sm">
-              <span className="text-red-500 mr-1">Rent Due:</span>
+              <span className="text-red-500 mr-1">Total Pending:</span>
               <span>₹{totalDue}</span>
             </div>
             <div className="text-sm">
-              <span className="text-green-500 mr-1">Rent Collected:</span>
-              <span>₹{totalCollected}</span>
+              <span className="text-blue-500 mr-1">Properties:</span>
+              <span>{node.properties.length}</span>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={() => openEditDialog(node)}
             >
-              <Edit className="h-4 w-4 mr-1" /> Edit
+              <Edit className="h-4 w-4 mr-1" /> Edit Subordinate
             </Button>
             <Button
               variant="outline"
@@ -454,16 +1041,17 @@ export default function HierarchyPage() {
               onClick={() => {
                 setSubordinateFormData((prev) => ({
                   ...prev,
-                  parentId: node._id,
+                  parentId: node.subordinateId,
                 }));
                 setPropertyFormData((prev) => ({
                   ...prev,
-                  currentManager: node._id,
+                  currentManager: node.subordinateId,
                 }));
+                setDialogType("both"); // Set to show both sections
                 setIsAddDialogOpen(true);
               }}
             >
-              <Plus className="h-4 w-4 mr-1" /> Add
+              <Plus className="h-4 w-4 mr-1" /> Add Property
             </Button>
           </div>
         </div>
@@ -473,25 +1061,15 @@ export default function HierarchyPage() {
             className="mt-2"
             style={{ marginLeft: `${(level + 1) * 1.5}rem` }}
           >
-            {node.properties.map((property) => (
-              <div
-                key={property._id}
-                className="p-2 bg-gray-100 dark:bg-gray-600 rounded-md mb-1 flex justify-between"
-              >
-                <span>{property.address}</span>
-                <span
-                  className={
-                    property.paymentStatus === "paid"
-                      ? "text-green-500"
-                      : "text-red-500"
-                  }
-                >
-                  {property.paymentStatus === "paid"
-                    ? `Paid: ₹${property.paymentAmount}`
-                    : `Due: ₹${property.paymentAmount}`}
-                </span>
-              </div>
-            ))}
+            {/* Render the property table */}
+            {node.properties.length > 0 && (
+              <PropertyTable
+                properties={node.properties}
+                onEdit={(property) => handleOpenPropertyEditDialog(property)}
+              />
+            )}
+
+            {/* Render subordinates recursively */}
             {node.subordinates.map((subordinate) =>
               renderHierarchyTree(subordinate, level + 1)
             )}
@@ -501,301 +1079,714 @@ export default function HierarchyPage() {
     );
   };
 
-  const handleEditSubordinate = () => {
-    toast({
-      title: "Info",
-      description: "Edit functionality not implemented yet",
-    });
-    setIsEditDialogOpen(false);
+  // Render the global adjustments section
+  const renderGlobalAdjustments = () => {
+    if (globalAdjustments.length === 0) return null;
+
+    return (
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center text-lg">
+            <DollarSign className="h-5 w-5 mr-2" />
+            Current Global Adjustments
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {globalAdjustments.map((adjustment) => (
+              <div
+                key={adjustment.id}
+                className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700"
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-medium capitalize">
+                    {adjustment.type}
+                  </span>
+                  <span className="text-blue-600 dark:text-blue-400 font-medium">
+                    {adjustment.percentage}%
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Effective from {formatDate(adjustment.effectiveFrom)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
+  // Updated handleEditSubordinate to call the API
+  const handleEditSubordinate = async () => {
+    try {
+      if (!selectedSubordinate) {
+        throw new Error("No subordinate selected");
+      }
+
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found");
+      }
+
+      // Show a loading toast
+      toast({
+        title: "Processing",
+        description: "Updating subordinate information...",
+        variant: "default",
+      });
+
+      // Prepare payload with only the fields that are filled in
+      const payload: Record<string, string> = {};
+
+      if (subordinateFormData.username.trim()) {
+        payload.username = subordinateFormData.username;
+      }
+
+      if (subordinateFormData.email.trim()) {
+        payload.email = subordinateFormData.email;
+      }
+
+      if (subordinateFormData.phone.trim()) {
+        payload.phone = subordinateFormData.phone;
+      }
+
+      if (subordinateFormData.fullName?.trim()) {
+        payload.fullName = subordinateFormData.fullName;
+      }
+
+      // Only make API call if we have fields to update
+      if (Object.keys(payload).length === 0) {
+        throw new Error("No changes to update");
+      }
+
+      // Make API call to update subordinate
+      const response = await fetch(
+        `https://renter-app-f0fc.onrender.com/api/users/update/${selectedSubordinate.subordinateId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Failed to update subordinate: ${response.statusText}`
+        );
+      }
+
+      // Handle successful response
+      toast({
+        title: "Success",
+        description: "Subordinate updated successfully",
+        variant: "default",
+      });
+
+      // Update UI by refreshing hierarchy data
+      fetchHierarchyData();
+
+      // Close the dialog
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update subordinate",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Updated openEditDialog function to fetch subordinate details
   const openEditDialog = (subordinate: Subordinate) => {
     setSelectedSubordinate(subordinate);
+
+    // Populate the form with existing data
     setSubordinateFormData({
-      username: subordinate.username,
-      email: "",
-      phone: "",
-      password: "",
-      role: subordinate.role,
+      username: subordinate.username || "",
+      email: subordinate.email || "",
+      phone: subordinate.phone || "",
+      password: "", // Don't populate password for security reasons
+      role: "subordinate",
       parentId: "",
+      fullName: "", // We might not have this field from the API
     });
+
+    // Optional: Fetch additional details if needed
+    fetchSubordinateDetails(subordinate.subordinateId);
+
     setIsEditDialogOpen(true);
+  };
+
+  // Add a function to fetch detailed subordinate information
+  const fetchSubordinateDetails = async (subordinateId: string) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found");
+      }
+
+      // Optional: Fetch additional details about the subordinate
+      const response = await fetch(
+        `https://renter-app-f0fc.onrender.com/api/users/${subordinateId}`,
+        {
+          headers: {
+            Authorization: `${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        // Silently fail - we'll use whatever data we have
+        return;
+      }
+
+      const data = await response.json();
+
+      // Update form with additional details if available
+      setSubordinateFormData((prev) => ({
+        ...prev,
+        email: data.email || prev.email,
+        phone: data.phone || prev.phone,
+        fullName: data.fullName || prev.fullName,
+      }));
+    } catch (error) {
+      // Handle silently - we'll use whatever data we have
+      console.error("Failed to fetch subordinate details:", error);
+    }
   };
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              Hierarchy Management
-            </h1>
-            <p className="text-muted-foreground">
-              Manage your organization's hierarchy structure
-            </p>
-          </div>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button
-                onClick={() => {
-                  const user = JSON.parse(localStorage.getItem("user") || "{}");
-                  setSubordinateFormData((prev) => ({
-                    ...prev,
-                    parentId: user._id || "",
-                  }));
-                  setPropertyFormData((prev) => ({
-                    ...prev,
-                    currentManager: user._id || "",
-                  }));
-                  setIsAddDialogOpen(true);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-2" /> Add Subordinate/Property
+      <div className="flex flex-col min-h-[calc(100vh-64px)]">
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">
+                Property Management
+              </h1>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSubordinateFormData((prev) => ({
+                        ...prev,
+                        parentId: userId || "",
+                      }));
+                      setPropertyFormData((prev) => ({
+                        ...prev,
+                        currentManager: userId || "",
+                      }));
+                      setDialogType("subordinate"); // Only show subordinate section
+                      setIsAddDialogOpen(true);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-2" /> Add Subordinate
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>
+                      {dialogType === "both"
+                        ? "Add New Item"
+                        : "Add New Subordinate"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {dialogType === "both"
+                        ? "Add a new subordinate or property under the selected manager."
+                        : "Add a new subordinate under the selected manager."}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-6 py-4">
+                    {/* Subordinate Section */}
+                    <div>
+                      <h3 className="text-lg font-medium mb-2">
+                        Add Subordinate
+                      </h3>
+                      <div className="grid gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="sub-fullname">Full Name</Label>
+                          <Input
+                            id="sub-fullname"
+                            placeholder="Enter employee's full name"
+                            value={subordinateFormData.fullName}
+                            onChange={(e) =>
+                              setSubordinateFormData({
+                                ...subordinateFormData,
+                                fullName: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="sub-username">Username</Label>
+                          <Input
+                            id="sub-username"
+                            placeholder="Login username"
+                            value={subordinateFormData.username}
+                            onChange={(e) =>
+                              setSubordinateFormData({
+                                ...subordinateFormData,
+                                username: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="sub-email">Email</Label>
+                          <Input
+                            id="sub-email"
+                            type="email"
+                            value={subordinateFormData.email}
+                            onChange={(e) =>
+                              setSubordinateFormData({
+                                ...subordinateFormData,
+                                email: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="sub-phone">Phone</Label>
+                          <Input
+                            id="sub-phone"
+                            value={subordinateFormData.phone}
+                            onChange={(e) =>
+                              setSubordinateFormData({
+                                ...subordinateFormData,
+                                phone: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="sub-password">Password</Label>
+                          <Input
+                            id="sub-password"
+                            type="password"
+                            value={subordinateFormData.password}
+                            onChange={(e) =>
+                              setSubordinateFormData({
+                                ...subordinateFormData,
+                                password: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <Button
+                          onClick={
+                            subordinateFormData.parentId === userId
+                              ? handleAddSubordinateTwo
+                              : handleAddSubordinate
+                          }
+                        >
+                          Add Subordinate
+                        </Button>
+                      </div>
+                    </div>
+                    {/* Property Section - only shown when dialogType is "both" */}
+                    {dialogType === "both" && (
+                      <div>
+                        <h3 className="text-lg font-medium mb-2">
+                          Add Property
+                        </h3>
+                        <div className="grid gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="prop-address">Address</Label>
+                            <Input
+                              id="prop-address"
+                              value={propertyFormData.address}
+                              onChange={(e) =>
+                                setPropertyFormData({
+                                  ...propertyFormData,
+                                  address: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="prop-rent">Current Rent</Label>
+                            <Input
+                              id="prop-rent"
+                              type="number"
+                              value={propertyFormData.currentRent}
+                              onChange={(e) =>
+                                setPropertyFormData({
+                                  ...propertyFormData,
+                                  currentRent: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <Button
+                            onClick={
+                              propertyFormData.currentManager === userId
+                                ? handleAddPropertyTwo
+                                : handleAddProperty
+                            }
+                          >
+                            Add Property
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsAddDialogOpen(false)}
+                    >
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+              <Button onClick={exportHierarchyToCSV}>
+                <Download className="h-4 w-4 mr-2" />
+                Export
               </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                <DialogTitle>Add New Subordinate or Property</DialogTitle>
-                <DialogDescription>
-                  Add a new subordinate or property under the selected manager.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-6 py-4">
-                {/* Subordinate Section */}
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Add Subordinate</h3>
-                  <div className="grid gap-4">
+              <Dialog
+                open={isRegisterRenterDialogOpen}
+                onOpenChange={setIsRegisterRenterDialogOpen}
+              >
+                <DialogTrigger asChild>
+                  {/* <Button variant="outline">
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Register Renter
+                </Button> */}
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Register New Renter</DialogTitle>
+                    <DialogDescription>
+                      Add a new renter to the system.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                      <Label htmlFor="sub-username">Username</Label>
+                      <Label htmlFor="username">Username</Label>
                       <Input
-                        id="sub-username"
-                        value={subordinateFormData.username}
+                        id="username"
+                        value={renterFormData.username}
                         onChange={(e) =>
-                          setSubordinateFormData({
-                            ...subordinateFormData,
+                          setRenterFormData({
+                            ...renterFormData,
                             username: e.target.value,
                           })
                         }
+                        required
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="sub-email">Email</Label>
+                      <Label htmlFor="email">Email</Label>
                       <Input
-                        id="sub-email"
+                        id="email"
                         type="email"
-                        value={subordinateFormData.email}
+                        value={renterFormData.email}
                         onChange={(e) =>
-                          setSubordinateFormData({
-                            ...subordinateFormData,
+                          setRenterFormData({
+                            ...renterFormData,
                             email: e.target.value,
                           })
                         }
+                        required
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="sub-phone">Phone</Label>
+                      <Label htmlFor="phone">Phone</Label>
                       <Input
-                        id="sub-phone"
-                        value={subordinateFormData.phone}
+                        id="phone"
+                        value={renterFormData.phone}
                         onChange={(e) =>
-                          setSubordinateFormData({
-                            ...subordinateFormData,
+                          setRenterFormData({
+                            ...renterFormData,
                             phone: e.target.value,
                           })
                         }
+                        pattern="\+?\d{10,15}"
+                        required
                       />
                     </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="sub-password">Password</Label>
-                      <Input
-                        id="sub-password"
-                        type="password"
-                        value={subordinateFormData.password}
-                        onChange={(e) =>
-                          setSubordinateFormData({
-                            ...subordinateFormData,
-                            password: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <Button
-                      onClick={
-                        subordinateFormData.parentId ===
-                        JSON.parse(localStorage.getItem("user") || "{}")._id
-                          ? handleAddSubordinateTwo
-                          : handleAddSubordinate
-                      }
-                    >
-                      Add Subordinate
-                    </Button>
                   </div>
-                </div>
-
-                {/* Property Section */}
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Add Property</h3>
-                  <div className="grid gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="prop-address">Address</Label>
-                      <Input
-                        id="prop-address"
-                        value={propertyFormData.address}
-                        onChange={(e) =>
-                          setPropertyFormData({
-                            ...propertyFormData,
-                            address: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="prop-rent">Current Rent</Label>
-                      <Input
-                        id="prop-rent"
-                        type="number"
-                        value={propertyFormData.currentRent}
-                        onChange={(e) =>
-                          setPropertyFormData({
-                            ...propertyFormData,
-                            currentRent: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
+                  <DialogFooter>
                     <Button
-                      onClick={
-                        propertyFormData.currentManager ===
-                        JSON.parse(localStorage.getItem("user") || "{}")._id
-                          ? handleAddPropertyTwo
-                          : handleAddProperty
-                      }
+                      variant="outline"
+                      onClick={() => setIsRegisterRenterDialogOpen(false)}
                     >
-                      Add Property
+                      Cancel
                     </Button>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsAddDialogOpen(false)}
-                >
-                  Close
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Subordinates Hierarchy</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-4">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-              </div>
-            ) : hierarchyData?.subordinates.length ? (
-              <div>
-                {hierarchyData.subordinates.map((subordinate) =>
-                  renderHierarchyTree(subordinate)
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No subordinates found</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Subordinate</DialogTitle>
-            <DialogDescription>
-              Update subordinate information.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-username">Name</Label>
-              <Input
-                id="edit-username"
-                value={subordinateFormData.username}
-                onChange={(e) =>
-                  setSubordinateFormData({
-                    ...subordinateFormData,
-                    username: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-email">Email</Label>
-              <Input
-                id="edit-email"
-                type="email"
-                value={subordinateFormData.email}
-                onChange={(e) =>
-                  setSubordinateFormData({
-                    ...subordinateFormData,
-                    email: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-phone">Phone</Label>
-              <Input
-                id="edit-phone"
-                value={subordinateFormData.phone}
-                onChange={(e) =>
-                  setSubordinateFormData({
-                    ...subordinateFormData,
-                    phone: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-role">Role</Label>
-              <Select
-                value={subordinateFormData.role}
-                onValueChange={(value) =>
-                  setSubordinateFormData({
-                    ...subordinateFormData,
-                    role: value,
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="supervisor">Supervisor</SelectItem>
-                  <SelectItem value="agent">Agent</SelectItem>
-                </SelectContent>
-              </Select>
+                    <Button onClick={handleRegisterRenter}>Register</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleEditSubordinate}>Update</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+          {/* Global Adjustments Section */}
+          {/* {renderGlobalAdjustments()} */}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Subordinate's Properties</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              ) : hierarchyData.length ? (
+                <div>
+                  {hierarchyData.map((subordinate) =>
+                    renderHierarchyTree(subordinate)
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">No subordinates found</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+        {/* Subordinate Edit Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Subordinate</DialogTitle>
+              <DialogDescription>
+                Update information for {selectedSubordinate?.username}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-fullname">Full Name</Label>
+                <Input
+                  id="edit-fullname"
+                  value={subordinateFormData.fullName}
+                  onChange={(e) =>
+                    setSubordinateFormData({
+                      ...subordinateFormData,
+                      fullName: e.target.value,
+                    })
+                  }
+                  placeholder="Enter full name"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-username">Username</Label>
+                <Input
+                  id="edit-username"
+                  value={subordinateFormData.username}
+                  onChange={(e) =>
+                    setSubordinateFormData({
+                      ...subordinateFormData,
+                      username: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={subordinateFormData.email}
+                  onChange={(e) =>
+                    setSubordinateFormData({
+                      ...subordinateFormData,
+                      email: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-phone">Phone</Label>
+                <Input
+                  id="edit-phone"
+                  value={subordinateFormData.phone}
+                  onChange={(e) =>
+                    setSubordinateFormData({
+                      ...subordinateFormData,
+                      phone: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleEditSubordinate}>Update</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* Property Edit Dialog */}
+        <Dialog
+          open={isPropertyEditDialogOpen}
+          onOpenChange={setIsPropertyEditDialogOpen}
+        >
+          <DialogContent className="sm:max-w-[550px]">
+            <DialogHeader>
+              <DialogTitle>Edit Property</DialogTitle>
+              <DialogDescription>
+                Manage property details, assign renters, and update rent amount.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 py-4">
+              <div>
+                <Label>Property Name</Label>
+                <Input value={selectedProperty?.address || ""} readOnly />
+              </div>
+
+              {/* Property Details Section */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Base Rent</Label>
+                  <Input
+                    value={`₹${selectedProperty?.currentRent || 0}`}
+                    readOnly
+                  />
+                </div>
+                {/* <h3 className="text-lg font-medium mb-2">Update Rent</h3> */}
+                <div className="grid gap-2">
+                  <Label htmlFor="newRent">New Base Rent Amount</Label>
+                  <Input
+                    id="newRent"
+                    type="number"
+                    value={changeRentData.newRent}
+                    onChange={(e) =>
+                      setChangeRentData({
+                        ...changeRentData,
+                        propertyId: selectedProperty?.propertyId || "",
+                        newRent: e.target.value,
+                      })
+                    }
+                  />
+                  {/* <div className="text-xs text-muted-foreground mt-1">
+                  Note: Global adjustments will be applied on top of this base
+                  rent amount.
+                </div> */}
+                </div>
+                {/* <div>
+                <Label>Current Month Rent</Label>
+                <div className="flex items-center mt-2">
+                  <span className="font-medium">
+                    ₹{selectedProperty?.currentMonthRent?.finalAmount || 0}
+                  </span>
+                  {selectedProperty?.currentMonthRent?.adjustments
+                    ?.totalAdjustmentAmount > 0 && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <Info className="h-4 w-4 ml-1.5 text-blue-500" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <div className="space-y-1 text-xs">
+                            <p>
+                              {selectedProperty?.currentMonthRent?.calculation}
+                            </p>
+                            <div>
+                              {selectedProperty?.currentMonthRent?.adjustments?.adjustments.map(
+                                (adj, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex justify-between"
+                                  >
+                                    <span>{adj.type}:</span>
+                                    <span>{adj.percentage}%</span>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
+              </div> */}
+              </div>
+
+              {/* Total Pending Section */}
+              {/* <div>
+              <Label>Total Pending</Label>
+              <Input
+                value={`₹${selectedProperty?.totalPending || 0}`}
+                className="text-red-500"
+                readOnly
+              />
+            </div> */}
+
+              {/* Change Rent Section */}
+              <div className="grid gap-2">
+                <Button onClick={handleChangeRent} className="mt-2">
+                  Update Rent
+                </Button>
+              </div>
+
+              {/* Assign Renter Section */}
+              <div>
+                {/* <h3 className="text-lg font-medium mb-2">Assign Renter</h3> */}
+                <div>
+                  <Label>Current Renter</Label>
+                  <Input
+                    value={selectedProperty?.renter?.username || "—"}
+                    readOnly
+                    className="mb-2"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="renter">Select New Renter</Label>
+                  <Select
+                    value={assignRenterData.renterId}
+                    onValueChange={(value) =>
+                      setAssignRenterData({
+                        propertyId: selectedProperty?.propertyId || "",
+                        renterId: value,
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a renter" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {renters.map((renter) => (
+                        <SelectItem key={renter._id} value={renter._id}>
+                          {renter.username}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={handleAssignRenter} className="mt-2">
+                    Assign Renter
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+        <Footer />
+      </div>
     </DashboardLayout>
   );
 }
