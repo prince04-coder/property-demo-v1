@@ -565,7 +565,7 @@ export default function SubordinatesOverviewPage() {
 
       // Optional: Fetch additional details about the subordinate
       const response = await fetch(
-        `http://localhost:3001/api/users/user-details/${subordinateId}`,
+        `https://property-demo-v1-backend.onrender.com/api/users/user-details/${subordinateId}`,
         {
           headers: {
             Authorization: `${token}`,
@@ -648,7 +648,7 @@ export default function SubordinatesOverviewPage() {
 
   //     // Make API call to update subordinate
   //     const response = await fetch(
-  //       `http://localhost:3001/api/users/update/${selectedSubordinate.subordinateId}`,
+  //       `https://property-demo-v1-backend.onrender.com/api/users/update/${selectedSubordinate.subordinateId}`,
   //       {
   //         method: "PUT",
   //         headers: {
@@ -724,7 +724,7 @@ export default function SubordinatesOverviewPage() {
 
       // Make API call to update subordinate
       const response = await fetch(
-        `http://localhost:3001/api/users/update/${selectedSubordinate.subordinateId}`,
+        `https://property-demo-v1-backend.onrender.com/api/users/update/${selectedSubordinate.subordinateId}`,
         {
           method: "PUT",
           headers: {
@@ -814,7 +814,7 @@ export default function SubordinatesOverviewPage() {
       if (!token) throw new Error("Authentication token not found");
 
       const response = await fetch(
-        "http://localhost:3001/api/users/hierarchy/per-month",
+        "https://property-demo-v1-backend.onrender.com/api/users/hierarchy/per-month",
         {
           headers: { Authorization: `${token}` },
         }
@@ -897,7 +897,7 @@ export default function SubordinatesOverviewPage() {
 
   //     // Optional: Fetch additional details about the subordinate
   //     const response = await fetch(
-  //       `http://localhost:3001/api/users/user-details/${subordinateId}`,
+  //       `https://property-demo-v1-backend.onrender.com/api/users/user-details/${subordinateId}`,
   //       {
   //         headers: {
   //           Authorization: `${token}`,
@@ -1017,14 +1017,17 @@ export default function SubordinatesOverviewPage() {
         parentId: userId,
       };
 
-      const response = await fetch("http://localhost:3001/api/users/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        "https://property-demo-v1-backend.onrender.com/api/users/create",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();

@@ -288,7 +288,7 @@
 //         console.log("Fetching property history for ID:", propertyId);
 
 //         const response = await fetch(
-//           `http://localhost:3001/api/properties/history/${propertyId}`,
+//           `https://property-demo-v1-backend.onrender.com/api/properties/history/${propertyId}`,
 //           {
 //             headers: { Authorization: `${token}` },
 //           }
@@ -643,7 +643,7 @@ export default function PropertyDetailPage() {
         console.log("Fetching property history for ID:", propertyId);
 
         const response = await fetch(
-          `http://localhost:3001/api/properties/history/${propertyId}`,
+          `https://property-demo-v1-backend.onrender.com/api/properties/history/${propertyId}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }

@@ -238,7 +238,7 @@ export default function UsersPage() {
       }
 
       const response = await fetch(
-        "http://localhost:3001/api/users/register-renter",
+        "https://property-demo-v1-backend.onrender.com/api/users/register-renter",
         {
           method: "POST",
           headers: {
@@ -310,9 +310,12 @@ export default function UsersPage() {
       }
 
       setLoading(true);
-      const response = await fetch("http://localhost:3001/api/users/renters", {
-        headers: { Authorization: `${token}` },
-      });
+      const response = await fetch(
+        "https://property-demo-v1-backend.onrender.com/api/users/renters",
+        {
+          headers: { Authorization: `${token}` },
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to fetch renters data");
@@ -374,7 +377,7 @@ export default function UsersPage() {
       }
 
       const response = await fetch(
-        `http://localhost:3001/api/properties/history/${propertyId}`,
+        `https://property-demo-v1-backend.onrender.com/api/properties/history/${propertyId}`,
         {
           headers: { Authorization: `${token}` },
         }
@@ -413,7 +416,7 @@ export default function UsersPage() {
       }
 
       const response = await fetch(
-        `http://localhost:3001/api/users/renter/homepage/${renterId}`,
+        `https://property-demo-v1-backend.onrender.com/api/users/renter/homepage/${renterId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -456,7 +459,7 @@ export default function UsersPage() {
       const newStatus = !currentStatus;
 
       const response = await fetch(
-        `http://localhost:3001/api/users/update/${renterId}`,
+        `https://property-demo-v1-backend.onrender.com/api/users/update/${renterId}`,
         {
           method: "PUT",
           headers: {
@@ -661,7 +664,7 @@ export default function UsersPage() {
 
       // Optional: Fetch additional details about the subordinate
       const response = await fetch(
-        `http://localhost:3001/api/users/user-details/${renterId}`,
+        `https://property-demo-v1-backend.onrender.com/api/users/user-details/${renterId}`,
         {
           headers: {
             Authorization: `${token}`,
@@ -764,7 +767,7 @@ export default function UsersPage() {
 
       // Make API call to update subordinate
       const response = await fetch(
-        `http://localhost:3001/api/users/update/${selectedRenter.renterId}`,
+        `https://property-demo-v1-backend.onrender.com/api/users/update/${selectedRenter.renterId}`,
         {
           method: "PUT",
           headers: {

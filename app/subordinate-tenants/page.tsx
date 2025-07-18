@@ -130,7 +130,7 @@
 //       }
 
 //       setLoading(true);
-//       const response = await fetch("http://localhost:3001/api/users/renters", {
+//       const response = await fetch("https://property-demo-v1-backend.onrender.com/api/users/renters", {
 //         headers: { Authorization: `Bearer ${token}` },
 //       });
 
@@ -182,7 +182,7 @@
 //       }
 
 //       const response = await fetch(
-//         `http://localhost:3001/api/properties/history/${propertyId}`,
+//         `https://property-demo-v1-backend.onrender.com/api/properties/history/${propertyId}`,
 //         {
 //           headers: { Authorization: `Bearer ${token}` },
 //         }
@@ -221,7 +221,7 @@
 //       }
 
 //       const response = await fetch(
-//         `http://localhost:3001/api/users/renter/homepage/${renterId}`,
+//         `https://property-demo-v1-backend.onrender.com/api/users/renter/homepage/${renterId}`,
 //         {
 //           headers: { Authorization: `Bearer ${token}` },
 //         }
@@ -1057,9 +1057,12 @@ export default function SubordinateTenantsPage() {
       }
 
       setLoading(true);
-      const response = await fetch("http://localhost:3001/api/users/renters", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetch(
+        "https://property-demo-v1-backend.onrender.com/api/users/renters",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to fetch renters data");
@@ -1109,7 +1112,7 @@ export default function SubordinateTenantsPage() {
       }
 
       const response = await fetch(
-        `http://localhost:3001/api/properties/history/${propertyId}`,
+        `https://property-demo-v1-backend.onrender.com/api/properties/history/${propertyId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -1148,7 +1151,7 @@ export default function SubordinateTenantsPage() {
   //       }
 
   //       const response = await fetch(
-  //         `http://localhost:3001/api/users/renter/homepage/${renterId}`,
+  //         `https://property-demo-v1-backend.onrender.com/api/users/renter/homepage/${renterId}`,
   //         {
   //           headers: { Authorization: `Bearer ${token}` },
   //         }
@@ -1186,7 +1189,7 @@ export default function SubordinateTenantsPage() {
       }
 
       const response = await fetch(
-        `http://localhost:3001/api/users/renter/homepage/${renterId}`,
+        `https://property-demo-v1-backend.onrender.com/api/users/renter/homepage/${renterId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }

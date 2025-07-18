@@ -200,7 +200,7 @@ export default function SubordinateHierarchyPage() {
       }
 
       const response = await fetch(
-        "http://localhost:3001/api/users/hierarchy/per-month",
+        "https://property-demo-v1-backend.onrender.com/api/users/hierarchy/per-month",
         {
           headers: { Authorization: `Bearer ${token}` },
         }

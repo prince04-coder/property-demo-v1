@@ -126,7 +126,7 @@
 //       }
 
 //       const response = await fetch(
-//         "http://localhost:3001/api/users/global-adjustments",
+//         "https://property-demo-v1-backend.onrender.com/api/users/global-adjustments",
 //         {
 //           method: "POST",
 //           headers: {
@@ -318,7 +318,7 @@
 //       }
 
 //       const response = await fetch(
-//         `http://localhost:3001/api/settings/${editingAdjustment.id}`,
+//         `https://property-demo-v1-backend.onrender.com/api/settings/${editingAdjustment.id}`,
 //         {
 //           method: "PUT",
 //           headers: {
@@ -736,7 +736,7 @@
 
 //         // Fetch dashboard data
 //         const response = await fetch(
-//           "http://localhost:3001/api/users/hierarchy/per-month",
+//           "https://property-demo-v1-backend.onrender.com/api/users/hierarchy/per-month",
 //           {
 //             headers: {
 //               Authorization: `${token}`,
@@ -759,7 +759,7 @@
 //         // Fetch notifications
 //         try {
 //           const notificationResponse = await fetch(
-//             "http://localhost:3001/api/notifications",
+//             "https://property-demo-v1-backend.onrender.com/api/notifications",
 //             {
 //               headers: {
 //                 Authorization: `Bearer ${token}`,
@@ -1303,17 +1303,20 @@ const GlobalAdjustmentForm: React.FC<{
         throw new Error("Authentication token not found");
       }
 
-      const response = await fetch("http://localhost:3001/api/settings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          type: formData.type,
-          percentage: formData.percentage,
-        }),
-      });
+      const response = await fetch(
+        "https://property-demo-v1-backend.onrender.com/api/settings",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            type: formData.type,
+            percentage: formData.percentage,
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -1491,7 +1494,7 @@ const GlobalAdjustmentTabs: React.FC<{
       }
 
       const response = await fetch(
-        `http://localhost:3001/api/settings/${editingAdjustment.id}`,
+        `https://property-demo-v1-backend.onrender.com/api/settings/${editingAdjustment.id}`,
         {
           method: "PUT",
           headers: {
@@ -1877,7 +1880,7 @@ export default function DashboardPage() {
 
         // Fetch dashboard data
         const response = await fetch(
-          "http://localhost:3001/api/users/hierarchy/per-month",
+          "https://property-demo-v1-backend.onrender.com/api/users/hierarchy/per-month",
           {
             headers: {
               Authorization: `${token}`,
@@ -1900,7 +1903,7 @@ export default function DashboardPage() {
         // Fetch notifications
         try {
           const notificationResponse = await fetch(
-            "http://localhost:3001/api/notifications",
+            "https://property-demo-v1-backend.onrender.com/api/notifications",
             {
               headers: {
                 Authorization: `Bearer ${token}`,

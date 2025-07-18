@@ -227,7 +227,7 @@ export default function HierarchyPage() {
 
   //     // Fetch renters
   //     const response = await fetch(
-  //       "http://localhost:3001/api/users/all-renters",
+  //       "https://property-demo-v1-backend.onrender.com/api/users/all-renters",
   //       {
   //         headers: {
   //           Authorization: `Bearer ${token}`,
@@ -286,7 +286,7 @@ export default function HierarchyPage() {
 
       // Fetch renters
       const response = await fetch(
-        "http://localhost:3001/api/users/all-renters",
+        "https://property-demo-v1-backend.onrender.com/api/users/all-renters",
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -328,14 +328,17 @@ export default function HierarchyPage() {
         fullName: subordinateFormData.fullName, // Add this line
       };
 
-      const response = await fetch("http://localhost:3001/api/users/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        "https://property-demo-v1-backend.onrender.com/api/users/create",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -473,14 +476,17 @@ export default function HierarchyPage() {
         currentManager: userId,
       };
 
-      const response = await fetch("http://localhost:3001/api/properties/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        "https://property-demo-v1-backend.onrender.com/api/properties/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -529,14 +535,17 @@ export default function HierarchyPage() {
         fullName: subordinateFormData.fullName, // Add this line
       };
 
-      const response = await fetch("http://localhost:3001/api/users/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        "https://property-demo-v1-backend.onrender.com/api/users/create",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -585,14 +594,17 @@ export default function HierarchyPage() {
         currentManager: propertyFormData.currentManager,
       };
 
-      const response = await fetch("http://localhost:3001/api/properties/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        "https://property-demo-v1-backend.onrender.com/api/properties/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -633,7 +645,7 @@ export default function HierarchyPage() {
       if (!token) throw new Error("Authentication token not found");
 
       const response = await fetch(
-        "http://localhost:3001/api/users/hierarchy/per-month",
+        "https://property-demo-v1-backend.onrender.com/api/users/hierarchy/per-month",
         {
           headers: { Authorization: `${token}` },
         }
@@ -665,7 +677,7 @@ export default function HierarchyPage() {
   //     }
 
   //     const response = await fetch(
-  //       "http://localhost:3001/api/users/all-renters",
+  //       "https://property-demo-v1-backend.onrender.com/api/users/all-renters",
   //       {
   //         headers: {
   //           Authorization: `Bearer ${token}`,
@@ -713,7 +725,7 @@ export default function HierarchyPage() {
 
       // Update request body to match new API requirements
       const response = await fetch(
-        `http://localhost:3001/api/properties/assign-renter/${assignRenterData.propertyId}`,
+        `https://property-demo-v1-backend.onrender.com/api/properties/assign-renter/${assignRenterData.propertyId}`,
         {
           method: "PUT",
           headers: {
@@ -814,7 +826,7 @@ export default function HierarchyPage() {
       }
 
       const response = await fetch(
-        `http://localhost:3001/api/properties/${selectedProperty.propertyId}/rent`,
+        `https://property-demo-v1-backend.onrender.com/api/properties/${selectedProperty.propertyId}/rent`,
         {
           method: "PUT",
           headers: {
@@ -870,7 +882,7 @@ export default function HierarchyPage() {
       }
 
       const response = await fetch(
-        "http://localhost:3001/api/users/register-renter",
+        "https://property-demo-v1-backend.onrender.com/api/users/register-renter",
         {
           method: "POST",
           headers: {
@@ -1260,7 +1272,7 @@ export default function HierarchyPage() {
 
       // Make API call to update subordinate
       const response = await fetch(
-        `http://localhost:3001/api/users/update/${selectedSubordinate.subordinateId}`,
+        `https://property-demo-v1-backend.onrender.com/api/users/update/${selectedSubordinate.subordinateId}`,
         {
           method: "PUT",
           headers: {
@@ -1334,7 +1346,7 @@ export default function HierarchyPage() {
 
       // Optional: Fetch additional details about the subordinate
       const response = await fetch(
-        `http://localhost:3001/api/users/user-details/${subordinateId}`,
+        `https://property-demo-v1-backend.onrender.com/api/users/user-details/${subordinateId}`,
         {
           headers: {
             Authorization: `${token}`,
