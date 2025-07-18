@@ -5,11 +5,10 @@ import DashboardLayout from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Footer } from "@/components/ui/footer";
-
+import { Search, Download, UserPlus, ArrowUpDown, Edit } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
-import { Search, Download, UserPlus, ArrowUpDown } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -28,6 +27,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import * as NavigationMenuPrimitive from "@radix-ui/react-navigation-menu";
 
 // Define types
 interface Renter {
@@ -309,12 +309,12 @@ const SubordinateDetailsDialog: React.FC<{
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center gap-2">
             <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-medium text-lg dark:bg-blue-900/30 dark:text-blue-300">
-              {subordinate.username.charAt(0).toUpperCase()}
+              {subordinate.username.charAt(0).toUpperCase() || "—"}
             </div>
-            {subordinate.username}
+            {subordinate.username || "—"}
           </DialogTitle>
           <DialogDescription>
-            {subordinate.employeeName} • {subordinate.phone}
+            {subordinate.employeeName || "—"} • {subordinate.phone || "—"}
           </DialogDescription>
         </DialogHeader>
 
@@ -326,7 +326,7 @@ const SubordinateDetailsDialog: React.FC<{
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 Username
               </div>
-              <div className="font-medium">{subordinate.email}</div>
+              <div className="font-medium">{subordinate.email || "—"}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -362,7 +362,7 @@ const SubordinateDetailsDialog: React.FC<{
                       </div>
                       {property.renter && (
                         <div className="text-sm mt-1">
-                          Rented to:{" "}
+                          Rented to:
                           <span className="font-medium">
                             {property.renter.username}
                           </span>
@@ -490,14 +490,14 @@ const SubordinateDetailsDialog: React.FC<{
                   </div>
                   <div className="mt-1 text-sm">
                     <span className="text-gray-500 dark:text-gray-400">
-                      Properties:{" "}
+                      Properties:
                     </span>
                     <span className="font-medium">{sub.properties.length}</span>
                   </div>
                   {sub.password && (
                     <div className="mt-1 text-sm">
                       <span className="text-gray-500 dark:text-gray-400">
-                        Password:{" "}
+                        Password:
                       </span>
                       <span className="font-medium">{sub.password}</span>
                     </div>
@@ -516,12 +516,24 @@ export default function SubordinatesOverviewPage() {
   const [hierarchyData, setHierarchyData] = useState<HierarchyData | null>(
     null
   );
+
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [flattenedSubordinates, setFlattenedSubordinates] = useState<
     Subordinate[]
   >([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [subordinateFormData, setSubordinateFormData] = useState({
+    username: "",
+    email: "",
+    phone: "",
+    fullName: "",
+    password: "",
+  });
+  const [selectedSubordinate, setSelectedSubordinate] =
+    useState<Subordinate | null>(null);
+
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -536,8 +548,7 @@ export default function SubordinatesOverviewPage() {
     direction: "asc",
   });
   // State for details dialog
-  const [selectedSubordinate, setSelectedSubordinate] =
-    useState<Subordinate | null>(null);
+
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
 
   const { toast } = useToast();
@@ -545,7 +556,250 @@ export default function SubordinatesOverviewPage() {
   useEffect(() => {
     fetchHierarchyData();
   }, []);
+  const fetchSubordinateDetails = async (subordinateId: string) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found");
+      }
 
+      // Optional: Fetch additional details about the subordinate
+      const response = await fetch(
+        `http://localhost:3001/api/users/user-details/${subordinateId}`,
+        {
+          headers: {
+            Authorization: `${token}`,
+          },
+        }
+      );
+
+      // if (!response.ok) {
+      //   // Log the specific error for debugging
+      //   console.error(
+      //     `Failed to fetch user details: ${response.status} ${response.statusText}`
+      //   );
+      //   return;
+      // }
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to fetch details");
+      }
+
+      const data = await response.json();
+      // Add this inside fetchSubordinateDetails after the data is fetched
+      console.log("Subordinate details from API:", data);
+      // Update form with additional details if available
+      setSubordinateFormData((prev) => ({
+        ...prev,
+        email: data.email || prev.email,
+        phone: data.phone || prev.phone,
+        fullName: data.fullName || prev.fullName,
+      }));
+    } catch (error) {
+      // Handle silently - we'll use whatever data we have
+      console.error("Failed to fetch subordinate details:", error);
+    }
+  };
+  // const handleEditSubordinate = async () => {
+  //   try {
+  //     if (!selectedSubordinate) {
+  //       throw new Error("No subordinate selected");
+  //     }
+
+  //     const token = localStorage.getItem("token");
+  //     if (!token) {
+  //       throw new Error("Authentication token not found");
+  //     }
+
+  //     // Show a loading toast
+  //     toast({
+  //       title: "Processing",
+  //       description: "Updating subordinate information...",
+  //       variant: "default",
+  //     });
+
+  //     // Prepare payload with only the fields that are filled in
+  //     const payload: Record<string, string> = {};
+
+  //     if (subordinateFormData.username.trim()) {
+  //       payload.username = subordinateFormData.username;
+  //     }
+
+  //     if (subordinateFormData.email.trim()) {
+  //       payload.email = subordinateFormData.email;
+  //     }
+
+  //     if (subordinateFormData.phone.trim()) {
+  //       payload.phone = subordinateFormData.phone;
+  //     }
+
+  //     if (subordinateFormData.fullName?.trim()) {
+  //       payload.fullName = subordinateFormData.fullName;
+  //     }
+
+  //     if (subordinateFormData.password.trim()) {
+  //       payload.password = subordinateFormData.password;
+  //     }
+
+  //     // Only make API call if we have fields to update
+  //     if (Object.keys(payload).length === 0) {
+  //       throw new Error("No changes to update");
+  //     }
+
+  //     // Make API call to update subordinate
+  //     const response = await fetch(
+  //       `http://localhost:3001/api/users/update/${selectedSubordinate.subordinateId}`,
+  //       {
+  //         method: "PUT",
+  //         headers: {
+  //           "Content-Type": "application/json",
+  //           Authorization: `${token}`,
+  //         },
+  //         body: JSON.stringify(payload),
+  //       }
+  //     );
+
+  //     if (!response.ok) {
+  //       const errorData = await response.json().catch(() => ({}));
+  //       throw new Error(
+  //         errorData.message ||
+  //           `Failed to update subordinate: ${response.statusText}`
+  //       );
+  //     }
+
+  //     // Handle successful response
+  //     toast({
+  //       title: "Success",
+  //       description: "Subordinate updated successfully",
+  //       variant: "default",
+  //     });
+
+  //     // Update UI by refreshing hierarchy data
+  //     fetchHierarchyData();
+
+  //     // Close the dialog
+  //     setIsEditDialogOpen(false);
+  //   } catch (error) {
+  //     toast({
+  //       title: "Error",
+  //       description:
+  //         error instanceof Error
+  //           ? error.message
+  //           : "Failed to update subordinate",
+  //       variant: "destructive",
+  //     });
+  //   }
+  // };
+  const handleEditSubordinate = async () => {
+    try {
+      if (!selectedSubordinate) {
+        throw new Error("No subordinate selected");
+      }
+
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found");
+      }
+
+      // Show a loading toast
+      toast({
+        title: "Processing",
+        description: "Updating subordinate information...",
+        variant: "default",
+      });
+
+      // Include all fields in payload, even empty ones
+      // This allows clearing existing values
+      const payload: Record<string, string> = {
+        username: subordinateFormData.username,
+        email: subordinateFormData.email,
+        phone: subordinateFormData.phone,
+        fullName: subordinateFormData.fullName || "",
+      };
+
+      // Only include password if it's not empty
+      if (subordinateFormData.password.trim()) {
+        payload.password = subordinateFormData.password;
+      }
+
+      // Make API call to update subordinate
+      const response = await fetch(
+        `http://localhost:3001/api/users/update/${selectedSubordinate.subordinateId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Failed to update subordinate: ${response.statusText}`
+        );
+        toast({
+          title: "Error",
+          description: errorData.message || "Failed to update subordinate",
+          variant: "destructive",
+        });
+      }
+
+      // Handle successful response
+      toast({
+        title: "Success",
+        description: "Subordinate updated successfully",
+        variant: "default",
+      });
+
+      // Update UI by refreshing hierarchy data
+      fetchHierarchyData();
+
+      // Close the dialog
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update subordinate",
+        variant: "destructive",
+      });
+    }
+  };
+  // Add this to useEffect - a direct DOM manipulation approach since React state isn't working
+  useEffect(() => {
+    // Add a style tag for editable inputs
+    const style = document.createElement("style");
+    style.textContent = `
+    input[data-editable="true"] {
+      border-color: #2563eb !important;
+      box-shadow: 0 0 0 1px #2563eb !important;
+    }
+  `;
+    document.head.appendChild(style);
+
+    return () => {
+      // Clean up
+      document.head.removeChild(style);
+    };
+  }, []);
+  const makeEditable = (inputId: string) => {
+    console.log(`Making ${inputId} editable`);
+    const input = document.getElementById(inputId);
+
+    if (input) {
+      input.removeAttribute("readOnly");
+      input.setAttribute("data-editable", "true");
+      input.style.borderColor = "#2563eb";
+      input.style.boxShadow = "0 0 0 1px #2563eb";
+      input.focus();
+    }
+  };
   useEffect(() => {
     if (hierarchyData) {
       const subordinates = flattenHierarchy(hierarchyData.hierarchy);
@@ -560,13 +814,16 @@ export default function SubordinatesOverviewPage() {
       if (!token) throw new Error("Authentication token not found");
 
       const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/hierarchy/per-month",
+        "http://localhost:3001/api/users/hierarchy/per-month",
         {
           headers: { Authorization: `${token}` },
         }
       );
 
-      if (!response.ok) throw new Error("Failed to fetch hierarchy data");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to add property");
+      }
 
       const data: HierarchyData = await response.json();
       setHierarchyData(data);
@@ -581,6 +838,96 @@ export default function SubordinatesOverviewPage() {
       setLoading(false);
     }
   };
+  // const openEditDialog = (subordinate: Subordinate, e?: React.MouseEvent) => {
+  //   // Prevent row click from triggering details dialog if clicked on edit button
+  //   if (e) {
+  //     e.stopPropagation();
+  //   }
+
+  //   setSelectedSubordinate(subordinate);
+
+  //   // Populate the form with existing data
+  //   setSubordinateFormData({
+  //     username: subordinate.username || "",
+  //     email: subordinate.email || "",
+  //     phone: subordinate.phone || "",
+  //     fullName: subordinate.employeeName || "",
+  //     password: "", // Don't populate password for security reasons
+  //   });
+
+  //   // Optional: Fetch additional details if needed
+  //   fetchSubordinateDetails(subordinate.subordinateId);
+
+  //   setIsEditDialogOpen(true);
+  // };
+  const openEditDialog = (subordinate: Subordinate, e?: React.MouseEvent) => {
+    // Prevent row click from triggering details dialog if clicked on edit button
+    if (e) {
+      e.stopPropagation();
+    }
+
+    setSelectedSubordinate(subordinate);
+
+    // Populate the form with existing data
+    setSubordinateFormData({
+      username: subordinate.username || "",
+      email: subordinate.email || "",
+      phone: subordinate.phone || "",
+      fullName: subordinate.employeeName || "",
+      password: "", // Don't populate password for security reasons
+    });
+
+    // Fetch additional details to ensure we have the most up-to-date information
+    fetchSubordinateDetails(subordinate.subordinateId);
+
+    // Open the dialog
+    setIsEditDialogOpen(true);
+
+    // Give focus to first field after dialog is visible
+    // setTimeout(() => {
+    //   document.getElementById("edit-fullname")?.focus();
+    // }, 100);
+  };
+  // const fetchSubordinateDetails = async (subordinateId: string) => {
+  //   try {
+  //     const token = localStorage.getItem("token");
+  //     if (!token) {
+  //       throw new Error("Authentication token not found");
+  //     }
+
+  //     // Optional: Fetch additional details about the subordinate
+  //     const response = await fetch(
+  //       `http://localhost:3001/api/users/user-details/${subordinateId}`,
+  //       {
+  //         headers: {
+  //           Authorization: `${token}`,
+  //         },
+  //       }
+  //     );
+
+  //     if (!response.ok) {
+  //       // Log the specific error for debugging
+  //       console.error(
+  //         `Failed to fetch user details: ${response.status} ${response.statusText}`
+  //       );
+  //       return;
+  //     }
+
+  //     const data = await response.json();
+  //     // Add this inside fetchSubordinateDetails after the data is fetched
+  //     console.log("Subordinate details from API:", data);
+  //     // Update form with additional details if available
+  //     setSubordinateFormData((prev) => ({
+  //       ...prev,
+  //       email: data.email || prev.email,
+  //       phone: data.phone || prev.phone,
+  //       fullName: data.fullName || prev.fullName,
+  //     }));
+  //   } catch (error) {
+  //     // Handle silently - we'll use whatever data we have
+  //     console.error("Failed to fetch subordinate details:", error);
+  //   }
+  // };
 
   // Function to flatten hierarchy into a single array of subordinates
   const flattenHierarchy = (subordinates: Subordinate[]): Subordinate[] => {
@@ -670,21 +1017,24 @@ export default function SubordinatesOverviewPage() {
         parentId: userId,
       };
 
-      const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/create",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `${token}`,
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch("http://localhost:3001/api/users/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to add subordinate");
+
+        toast({
+          title: "Error",
+          description: errorData.message || "Failed to add subordinate",
+          variant: "destructive",
+        });
       }
 
       toast({
@@ -760,6 +1110,10 @@ export default function SubordinatesOverviewPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    toast({
+      title: "Export successful",
+      description: `${filteredSubordinates.length} subdivisions exported to CSV`,
+    });
   };
 
   // Function to show subordinate details
@@ -770,12 +1124,12 @@ export default function SubordinatesOverviewPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col min-h-[calc(95vh-64px)]">
+      <div className="flex flex-col min-h-[calc(100vh-64px)]">
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">
-                Subordinates Management
+                Subdivision's Manager
               </h1>
               {/* <p className="text-muted-foreground">
               Manage and monitor all your subordinates in one place
@@ -787,7 +1141,7 @@ export default function SubordinatesOverviewPage() {
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Search subordinates..."
+                  placeholder="Search managers..."
                   className="pl-8  pl-8 border-2 border-gray-400 dark:border-gray-500 focus:border-gray-600 dark:focus:border-gray-400"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -796,16 +1150,16 @@ export default function SubordinatesOverviewPage() {
 
               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline">
+                  {/* <Button variant="outline">
                     <UserPlus className="h-4 w-4 mr-2" />
-                    Add Subordinate
-                  </Button>
+                    Add Subdivision
+                  </Button> */}
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Add New Subordinate</DialogTitle>
+                    <DialogTitle>Add New Subdivision</DialogTitle>
                     <DialogDescription>
-                      Create a new subordinate account under your management.
+                      Create a new subdivision account under your management.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
@@ -820,7 +1174,7 @@ export default function SubordinatesOverviewPage() {
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="email">Email</Label>
+                      <Label htmlFor="email">Username</Label>
                       <Input
                         id="email"
                         type="email"
@@ -868,7 +1222,7 @@ export default function SubordinatesOverviewPage() {
 
               <Button onClick={exportToCSV}>
                 <Download className="h-4 w-4 mr-2" />
-                Export
+                Export Files
               </Button>
             </div>
           </div>
@@ -889,60 +1243,32 @@ export default function SubordinatesOverviewPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead
-                        onClick={() => handleSort("username")}
-                        className="cursor-pointer"
-                      >
+                      <TableHead>
+                        <div className="flex items-center">S.No.</div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer">
                         <div className="flex items-center">
-                          Subordinate
-                          <ArrowUpDown className="ml-2 h-3 w-3" />
+                          Subdivision Name
                         </div>
                       </TableHead>
-                      <TableHead
-                        onClick={() => handleSort("email")}
-                        className="cursor-pointer"
-                      >
+                      <TableHead className="cursor-pointer">
                         <div className="flex items-center">
-                          Subordinate Head
-                          <ArrowUpDown className="ml-2 h-3 w-3" />
+                          Subdivision Manager
                         </div>
                       </TableHead>
-                      <TableHead
-                        onClick={() => handleSort("email")}
-                        className="cursor-pointer"
-                      >
-                        <div className="flex items-center">
-                          User id
-                          <ArrowUpDown className="ml-2 h-3 w-3" />
-                        </div>
+                      <TableHead className="cursor-pointer">
+                        <div className="flex items-center">Username</div>
                       </TableHead>
-                      <TableHead
-                        onClick={() => handleSort("phone")}
-                        className="cursor-pointer"
-                      >
-                        <div className="flex items-center">
-                          Contact No.
-                          <ArrowUpDown className="ml-2 h-3 w-3" />
-                        </div>
+                      <TableHead className="cursor-pointer">
+                        <div className="flex items-center">Contact No.</div>
                       </TableHead>
-                      <TableHead
-                        onClick={() => handleSort("propertiesCount")}
-                        className="cursor-pointer"
-                      >
-                        <div className="flex items-center">
-                          Properties
-                          <ArrowUpDown className="ml-2 h-3 w-3" />
-                        </div>
+                      <TableHead className="cursor-pointer">
+                        <div className="flex items-center">Properties</div>
                       </TableHead>
-                      <TableHead
-                        onClick={() => handleSort("totalPending")}
-                        className="cursor-pointer"
-                      >
-                        <div className="flex items-center">
-                          Total Pending
-                          <ArrowUpDown className="ml-2 h-3 w-3" />
-                        </div>
+                      <TableHead className="cursor-pointer">
+                        <div className="flex items-center">Total Pending</div>
                       </TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -953,17 +1279,22 @@ export default function SubordinatesOverviewPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredSubordinates.map((subordinate) => (
+                      flattenedSubordinates.map((subordinate) => (
                         <TableRow
                           key={subordinate.subordinateId}
                           className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                           onClick={() => showSubordinateDetails(subordinate)}
                         >
                           <TableCell className="font-medium">
+                            {flattenedSubordinates.indexOf(subordinate) + 1}
+                          </TableCell>
+                          <TableCell className="font-medium">
                             {subordinate.username}
                           </TableCell>
+                          <TableCell>
+                            {subordinate.employeeName || "—"}
+                          </TableCell>
                           <TableCell>{subordinate.email || "—"}</TableCell>
-                          <TableCell>{subordinate.employeeName}</TableCell>
                           <TableCell>{subordinate.phone || "—"}</TableCell>
                           <TableCell>
                             <span className="font-medium">
@@ -974,6 +1305,15 @@ export default function SubordinatesOverviewPage() {
                             <span className="text-red-600 font-medium dark:text-red-400">
                               ₹{calculateTotalPending(subordinate)}
                             </span>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => openEditDialog(subordinate, e)}
+                            >
+                              <Edit className="h-4 w-4 mr-1" /> Edit
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))
@@ -991,6 +1331,266 @@ export default function SubordinatesOverviewPage() {
             onClose={() => setIsDetailsDialogOpen(false)}
           />
         </div>
+        {/* <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Subdivision</DialogTitle>
+              <DialogDescription>
+                Update information for {selectedSubordinate?.username}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-fullname">Manager Name</Label>
+                <Input
+                  id="edit-fullname"
+                  value={subordinateFormData.fullName}
+                  onChange={(e) =>
+                    setSubordinateFormData({
+                      ...subordinateFormData,
+                      fullName: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-username">Subdivision Name</Label>
+                <Input
+                  id="edit-username"
+                  value={subordinateFormData.username}
+                  onChange={(e) =>
+                    setSubordinateFormData({
+                      ...subordinateFormData,
+                      username: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-email">Username</Label>
+                <Input
+                  id="edit-email"
+                  value={subordinateFormData.email}
+                  onChange={(e) =>
+                    setSubordinateFormData({
+                      ...subordinateFormData,
+                      email: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-phone">Phone</Label>
+                <Input
+                  id="edit-phone"
+                  value={subordinateFormData.phone}
+                  onChange={(e) =>
+                    setSubordinateFormData({
+                      ...subordinateFormData,
+                      phone: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-password">Password</Label>
+                <Input
+                  id="edit-password"
+                  value={subordinateFormData.password}
+                  onChange={(e) =>
+                    setSubordinateFormData({
+                      ...subordinateFormData,
+                      password: e.target.value,
+                    })
+                  }
+                  placeholder="Leave blank to keep current password"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Only enter a value if you want to change the password.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleEditSubordinate}>Update</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog> */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Subdivision</DialogTitle>
+              <DialogDescription>
+                Update information for {selectedSubordinate?.username}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-fullname">Manager Name</Label>
+                <div className="relative">
+                  <Input
+                    id="edit-fullname"
+                    value={subordinateFormData.fullName}
+                    onChange={(e) =>
+                      setSubordinateFormData({
+                        ...subordinateFormData,
+                        fullName: e.target.value,
+                      })
+                    }
+                    className="pr-10"
+                    readOnly={true}
+                    data-editable="false"
+                    onClick={(e) => e.currentTarget.blur()}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => makeEditable("edit-fullname")}
+                  >
+                    <Edit className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="edit-username">Subdivision Name</Label>
+                <div className="relative">
+                  <Input
+                    id="edit-username"
+                    value={subordinateFormData.username}
+                    onChange={(e) =>
+                      setSubordinateFormData({
+                        ...subordinateFormData,
+                        username: e.target.value,
+                      })
+                    }
+                    className="pr-10"
+                    readOnly={true}
+                    data-editable="false"
+                    onClick={(e) => e.currentTarget.blur()}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => makeEditable("edit-username")}
+                  >
+                    <Edit className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="edit-email">Username</Label>
+                <div className="relative">
+                  <Input
+                    id="edit-email"
+                    value={subordinateFormData.email}
+                    onChange={(e) =>
+                      setSubordinateFormData({
+                        ...subordinateFormData,
+                        email: e.target.value,
+                      })
+                    }
+                    className="pr-10"
+                    readOnly={true}
+                    data-editable="false"
+                    onClick={(e) => e.currentTarget.blur()}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => makeEditable("edit-email")}
+                  >
+                    <Edit className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="edit-phone">Phone</Label>
+                <div className="relative">
+                  <Input
+                    id="edit-phone"
+                    value={subordinateFormData.phone}
+                    onChange={(e) =>
+                      setSubordinateFormData({
+                        ...subordinateFormData,
+                        phone: e.target.value,
+                      })
+                    }
+                    className="pr-10"
+                    readOnly={true}
+                    data-editable="false"
+                    onClick={(e) => e.currentTarget.blur()}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => makeEditable("edit-phone")}
+                  >
+                    <Edit className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="edit-password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="edit-password"
+                    type="password"
+                    value={subordinateFormData.password}
+                    onChange={(e) =>
+                      setSubordinateFormData({
+                        ...subordinateFormData,
+                        password: e.target.value,
+                      })
+                    }
+                    placeholder="Leave blank to keep current password"
+                    className="pr-10"
+                    readOnly={true}
+                    data-editable="false"
+                    onClick={(e) => e.currentTarget.blur()}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => makeEditable("edit-password")}
+                  >
+                    <Edit className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Only enter a value if you want to change the password.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleEditSubordinate}>Update</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Footer />
       </div>

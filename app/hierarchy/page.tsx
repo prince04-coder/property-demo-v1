@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
+
 import DashboardLayout from "@/components/dashboard-layout";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Plus, Edit, ChevronRight, ChevronDown, Info } from "lucide-react";
@@ -136,8 +137,11 @@ export default function HierarchyPage() {
     role: "renter",
   });
   const [assignRenterData, setAssignRenterData] = useState({
-    renterId: "",
     propertyId: "",
+    renterId: "",
+    startDate: new Date().toISOString().split("T")[0], // Current date in YYYY-MM-DD format
+    endDate: "", // Optional
+    annualIncreasePercentage: "0", // Default to 0
   });
   const [changeRentData, setChangeRentData] = useState({
     propertyId: "",
@@ -173,8 +177,22 @@ export default function HierarchyPage() {
     useState(false);
 
   // New state to track dialog type
-  const [dialogType, setDialogType] = useState<"both" | "subordinate">("both");
+  const [dialogType, setDialogType] = useState<
+    "both" | "subordinate" | "property"
+  >("both");
+  // Add these state variables in your component
+  const [startDateDisplay, setStartDateDisplay] = useState("");
+  const [endDateDisplay, setEndDateDisplay] = useState("");
 
+  // In your useEffect or when dialog opens, initialize them:
+  useEffect(() => {
+    if (assignRenterData.startDate) {
+      setStartDateDisplay(formatDateForDisplay(assignRenterData.startDate));
+    }
+    if (assignRenterData.endDate) {
+      setEndDateDisplay(formatDateForDisplay(assignRenterData.endDate));
+    }
+  }, [assignRenterData.startDate, assignRenterData.endDate]);
   const { toast } = useToast();
 
   // Store user ID in state to avoid direct localStorage access during prerendering
@@ -186,6 +204,54 @@ export default function HierarchyPage() {
       setUserId(user._id || null);
     }
   }, []);
+  // const handleOpenPropertyEditDialog = async (property: Property) => {
+  //   try {
+  //     const token = localStorage.getItem("token");
+  //     if (!token) {
+  //       throw new Error("Authentication token not found");
+  //     }
+
+  //     setSelectedProperty(property);
+
+  //     // Set initial values for changeRentData
+  //     setChangeRentData({
+  //       propertyId: property.propertyId,
+  //       newRent: "",
+  //     });
+
+  //     // Set initial values for assignRenterData
+  //     setAssignRenterData({
+  //       propertyId: property.propertyId,
+  //       renterId: property.renter?.id || "",
+  //     });
+
+  //     // Fetch renters
+  //     const response = await fetch(
+  //       "http://localhost:3001/api/users/all-renters",
+  //       {
+  //         headers: {
+  //           Authorization: `Bearer ${token}`,
+  //         },
+  //       }
+  //     );
+
+  //     if (!response.ok) {
+  //       throw new Error("Failed to fetch renters");
+  //     }
+
+  //     const rentersData = await response.json();
+  //     setRenters(rentersData);
+
+  //     setIsPropertyEditDialogOpen(true);
+  //   } catch (error) {
+  //     toast({
+  //       title: "Error",
+  //       description:
+  //         error instanceof Error ? error.message : "Failed to fetch renters",
+  //       variant: "destructive",
+  //     });
+  //   }
+  // };
   const handleOpenPropertyEditDialog = async (property: Property) => {
     try {
       const token = localStorage.getItem("token");
@@ -201,15 +267,26 @@ export default function HierarchyPage() {
         newRent: "",
       });
 
-      // Set initial values for assignRenterData
+      // Set initial values for assignRenterData with the new fields
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      nextMonth.setDate(1); // First day of next month
+
+      const nextYear = new Date(nextMonth);
+      nextYear.setFullYear(nextMonth.getFullYear() + 1);
+      nextYear.setDate(0); // Last day of the month
+
       setAssignRenterData({
         propertyId: property.propertyId,
         renterId: property.renter?.id || "",
+        startDate: nextMonth.toISOString().split("T")[0],
+        endDate: nextYear.toISOString().split("T")[0],
+        annualIncreasePercentage: "0",
       });
 
       // Fetch renters
       const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/all-renters",
+        "http://localhost:3001/api/users/all-renters",
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -251,17 +328,14 @@ export default function HierarchyPage() {
         fullName: subordinateFormData.fullName, // Add this line
       };
 
-      const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/create",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `${token}`,
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch("http://localhost:3001/api/users/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -270,7 +344,7 @@ export default function HierarchyPage() {
 
       toast({
         title: "Success",
-        description: "Subordinate added successfully",
+        description: "Subdivision added successfully",
         variant: "default",
       });
 
@@ -287,8 +361,8 @@ export default function HierarchyPage() {
       // Refresh hierarchy data
       fetchHierarchyData();
 
-      // Close the dialog
-      setIsAddDialogOpen(false);
+      // // Close the dialog
+      // setIsAddDialogOpen(false);
     } catch (error) {
       toast({
         title: "Error",
@@ -399,17 +473,14 @@ export default function HierarchyPage() {
         currentManager: userId,
       };
 
-      const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/properties/",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `${token}`,
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch("http://localhost:3001/api/properties/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -458,17 +529,14 @@ export default function HierarchyPage() {
         fullName: subordinateFormData.fullName, // Add this line
       };
 
-      const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/create",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `${token}`,
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch("http://localhost:3001/api/users/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -477,7 +545,7 @@ export default function HierarchyPage() {
 
       toast({
         title: "Success",
-        description: "Subordinate added successfully",
+        description: "Subdivision added successfully",
         variant: "default",
       });
 
@@ -517,17 +585,14 @@ export default function HierarchyPage() {
         currentManager: propertyFormData.currentManager,
       };
 
-      const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/properties/",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `${token}`,
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch("http://localhost:3001/api/properties/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -568,7 +633,7 @@ export default function HierarchyPage() {
       if (!token) throw new Error("Authentication token not found");
 
       const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/hierarchy/per-month",
+        "http://localhost:3001/api/users/hierarchy/per-month",
         {
           headers: { Authorization: `${token}` },
         }
@@ -592,44 +657,44 @@ export default function HierarchyPage() {
     }
   };
 
-  const handleOpenAssignRenterDialog = async (property: Property) => {
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        throw new Error("Authentication token not found");
-      }
+  // const handleOpenAssignRenterDialog = async (property: Property) => {
+  //   try {
+  //     const token = localStorage.getItem("token");
+  //     if (!token) {
+  //       throw new Error("Authentication token not found");
+  //     }
 
-      const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/all-renters",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+  //     const response = await fetch(
+  //       "http://localhost:3001/api/users/all-renters",
+  //       {
+  //         headers: {
+  //           Authorization: `Bearer ${token}`,
+  //         },
+  //       }
+  //     );
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch renters");
-      }
+  //     if (!response.ok) {
+  //       throw new Error("Failed to fetch renters");
+  //     }
 
-      const rentersData = await response.json();
-      setRenters(rentersData);
+  //     const rentersData = await response.json();
+  //     setRenters(rentersData);
 
-      setSelectedProperty(property);
-      setAssignRenterData({
-        propertyId: property.propertyId,
-        renterId: "",
-      });
-      setIsAssignRenterDialogOpen(true);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to fetch renters",
-        variant: "destructive",
-      });
-    }
-  };
+  //     setSelectedProperty(property);
+  //     setAssignRenterData({
+  //       propertyId: property.propertyId,
+  //       renterId: "",
+  //     });
+  //     setIsAssignRenterDialogOpen(true);
+  //   } catch (error) {
+  //     toast({
+  //       title: "Error",
+  //       description:
+  //         error instanceof Error ? error.message : "Failed to fetch renters",
+  //       variant: "destructive",
+  //     });
+  //   }
+  // };
 
   const handleAssignRenter = async () => {
     try {
@@ -639,21 +704,29 @@ export default function HierarchyPage() {
       }
 
       // Show loading toast
-      const loadingToast = toast({
+      // Show loading toast and capture the toast ID for later dismissal
+      const { id: loadingToastId } = toast({
         title: "Processing",
         description: "Assigning renter to property...",
         variant: "default",
       });
 
+      // Update request body to match new API requirements
       const response = await fetch(
-        `https://renter-app-f0fc.onrender.com/api/properties/assign-renter/${assignRenterData.propertyId}`,
+        `http://localhost:3001/api/properties/assign-renter/${assignRenterData.propertyId}`,
         {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ newRenterId: assignRenterData.renterId }),
+          body: JSON.stringify({
+            newRenterId: assignRenterData.renterId,
+            startDate: assignRenterData.startDate,
+            endDate: assignRenterData.endDate || undefined, // Only include if provided
+            annualIncreasePercentage:
+              Number(assignRenterData.annualIncreasePercentage) || 0,
+          }),
         }
       );
 
@@ -674,7 +747,7 @@ export default function HierarchyPage() {
         const updatedHierarchy = JSON.parse(JSON.stringify(prev));
 
         // Helper function to find and update the property in the hierarchy
-        const updatePropertyInHierarchy = (nodes) => {
+        const updatePropertyInHierarchy = (nodes: Subordinate[]) => {
           for (const node of nodes) {
             // Check properties in this node
             for (let i = 0; i < node.properties.length; i++) {
@@ -741,7 +814,7 @@ export default function HierarchyPage() {
       }
 
       const response = await fetch(
-        `https://renter-app-f0fc.onrender.com/api/properties/${selectedProperty.propertyId}/rent`,
+        `http://localhost:3001/api/properties/${selectedProperty.propertyId}/rent`,
         {
           method: "PUT",
           headers: {
@@ -797,7 +870,7 @@ export default function HierarchyPage() {
       }
 
       const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/register-renter",
+        "http://localhost:3001/api/users/register-renter",
         {
           method: "POST",
           headers: {
@@ -927,7 +1000,7 @@ export default function HierarchyPage() {
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
                           <div className="space-y-1 text-xs">
-                            <p>{property.currentMonthRent.calculation}</p>
+                            <p>{property.currentMonthRent.calculation} </p>
                             <div>
                               {property.currentMonthRent.adjustments.adjustments.map(
                                 (adj, idx) => (
@@ -952,19 +1025,26 @@ export default function HierarchyPage() {
                 <span className="text-red-500">₹{property.totalPending}</span>
               </td>
               <td className="px-4 py-2">
-                {property.currentMonthRent.isPaid ? (
+                {property.currentMonthRent.isPaid === true ? (
                   <Badge
                     variant="outline"
                     className="bg-green-100 text-green-800 border-green-200 hover:bg-green-200"
                   >
                     Paid
                   </Badge>
-                ) : (
+                ) : property.currentMonthRent.isPaid === false ? (
                   <Badge
                     variant="outline"
                     className="bg-red-100 text-red-800 border-red-200 hover:bg-red-200"
                   >
                     Unpaid
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200"
+                  >
+                    N/A
                   </Badge>
                 )}
               </td>
@@ -1015,7 +1095,7 @@ export default function HierarchyPage() {
             )}
             <div>
               <h3 className="font-medium">{node.username}</h3>
-              <p className="text-xs text-muted-foreground">subordinate</p>
+              <p className="text-xs text-muted-foreground">Subdivison</p>
             </div>
           </div>
 
@@ -1028,13 +1108,13 @@ export default function HierarchyPage() {
               <span className="text-blue-500 mr-1">Properties:</span>
               <span>{node.properties.length}</span>
             </div>
-            <Button
+            {/* <Button
               variant="outline"
               size="sm"
               onClick={() => openEditDialog(node)}
             >
-              <Edit className="h-4 w-4 mr-1" /> Edit Subordinate
-            </Button>
+              <Edit className="h-4 w-4 mr-1" /> Edit Subdivision
+            </Button> */}
             <Button
               variant="outline"
               size="sm"
@@ -1047,7 +1127,8 @@ export default function HierarchyPage() {
                   ...prev,
                   currentManager: node.subordinateId,
                 }));
-                setDialogType("both"); // Set to show both sections
+                setDialogType("property"); // Set to show subordinate section
+
                 setIsAddDialogOpen(true);
               }}
             >
@@ -1116,7 +1197,21 @@ export default function HierarchyPage() {
       </Card>
     );
   };
+  // Add these helper functions at the top with your other functions
+  const formatDateForDisplay = (dateString: string) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    const day = date.getDate().toString().padStart(2, "0");
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
 
+  const parseDateFromDisplay = (displayDate: string) => {
+    if (!displayDate || !/^\d{2}\/\d{2}\/\d{4}$/.test(displayDate)) return "";
+    const [day, month, year] = displayDate.split("/");
+    return `${year}-${month}-${day}`;
+  };
   // Updated handleEditSubordinate to call the API
   const handleEditSubordinate = async () => {
     try {
@@ -1154,6 +1249,9 @@ export default function HierarchyPage() {
       if (subordinateFormData.fullName?.trim()) {
         payload.fullName = subordinateFormData.fullName;
       }
+      if (subordinateFormData.password.trim()) {
+        payload.password = subordinateFormData.password;
+      }
 
       // Only make API call if we have fields to update
       if (Object.keys(payload).length === 0) {
@@ -1162,7 +1260,7 @@ export default function HierarchyPage() {
 
       // Make API call to update subordinate
       const response = await fetch(
-        `https://renter-app-f0fc.onrender.com/api/users/update/${selectedSubordinate.subordinateId}`,
+        `http://localhost:3001/api/users/update/${selectedSubordinate.subordinateId}`,
         {
           method: "PUT",
           headers: {
@@ -1172,7 +1270,7 @@ export default function HierarchyPage() {
           body: JSON.stringify(payload),
         }
       );
-
+      console.log("sdfghgfd", subordinateFormData);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
@@ -1236,7 +1334,7 @@ export default function HierarchyPage() {
 
       // Optional: Fetch additional details about the subordinate
       const response = await fetch(
-        `https://renter-app-f0fc.onrender.com/api/users/${subordinateId}`,
+        `http://localhost:3001/api/users/user-details/${subordinateId}`,
         {
           headers: {
             Authorization: `${token}`,
@@ -1245,12 +1343,16 @@ export default function HierarchyPage() {
       );
 
       if (!response.ok) {
-        // Silently fail - we'll use whatever data we have
+        // Log the specific error for debugging
+        console.error(
+          `Failed to fetch user details: ${response.status} ${response.statusText}`
+        );
         return;
       }
 
       const data = await response.json();
-
+      // Add this inside fetchSubordinateDetails after the data is fetched
+      console.log("Subordinate details from API:", data);
       // Update form with additional details if available
       setSubordinateFormData((prev) => ({
         ...prev,
@@ -1292,111 +1394,69 @@ export default function HierarchyPage() {
                       setIsAddDialogOpen(true);
                     }}
                   >
-                    <Plus className="h-4 w-4 mr-2" /> Add Subordinate
+                    <Plus className="h-4 w-4 mr-2" /> Add Subdivision
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>
-                      {dialogType === "both"
-                        ? "Add New Item"
-                        : "Add New Subordinate"}
-                    </DialogTitle>
-                    <DialogDescription>
-                      {dialogType === "both"
-                        ? "Add a new subordinate or property under the selected manager."
-                        : "Add a new subordinate under the selected manager."}
-                    </DialogDescription>
-                  </DialogHeader>
+                  <VisuallyHidden>
+                    {" "}
+                    <DialogHeader>
+                      <DialogTitle>
+                        {dialogType === "both"
+                          ? "Add New Item"
+                          : dialogType === "subordinate"
+                          ? "Add New Subdivision"
+                          : "Add New Property"}
+                      </DialogTitle>
+                      <DialogDescription>
+                        {dialogType === "both"
+                          ? "Add a new subordinate or property under the selected manager."
+                          : dialogType === "subordinate"
+                          ? "Add a new subdivision under the selected manager."
+                          : "Add a new property under the selected manager."}
+                      </DialogDescription>
+                    </DialogHeader>
+                  </VisuallyHidden>
                   <div className="grid gap-6 py-4">
-                    {/* Subordinate Section */}
-                    <div>
-                      <h3 className="text-lg font-medium mb-2">
-                        Add Subordinate
-                      </h3>
-                      <div className="grid gap-4">
-                        <div className="grid gap-2">
-                          <Label htmlFor="sub-fullname">Full Name</Label>
-                          <Input
-                            id="sub-fullname"
-                            placeholder="Enter employee's full name"
-                            value={subordinateFormData.fullName}
-                            onChange={(e) =>
-                              setSubordinateFormData({
-                                ...subordinateFormData,
-                                fullName: e.target.value,
-                              })
+                    {/* Subordinate Section - only shown when dialogType is "subordinate" or "both" */}
+                    {(dialogType === "subordinate" ||
+                      dialogType === "both") && (
+                      <div>
+                        <h3 className="text-lg font-medium mb-2">
+                          Add Subdivision
+                        </h3>
+                        <div className="grid gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="sub-username">
+                              Subdivision Name
+                            </Label>
+                            <Input
+                              id="sub-username"
+                              placeholder="Login username"
+                              value={subordinateFormData.username}
+                              onChange={(e) =>
+                                setSubordinateFormData({
+                                  ...subordinateFormData,
+                                  username: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <Button
+                            onClick={
+                              subordinateFormData.parentId === userId
+                                ? handleAddSubordinateTwo
+                                : handleAddSubordinate
                             }
-                          />
+                          >
+                            Add Subordinate
+                          </Button>
                         </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="sub-username">Username</Label>
-                          <Input
-                            id="sub-username"
-                            placeholder="Login username"
-                            value={subordinateFormData.username}
-                            onChange={(e) =>
-                              setSubordinateFormData({
-                                ...subordinateFormData,
-                                username: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="sub-email">Email</Label>
-                          <Input
-                            id="sub-email"
-                            type="email"
-                            value={subordinateFormData.email}
-                            onChange={(e) =>
-                              setSubordinateFormData({
-                                ...subordinateFormData,
-                                email: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="sub-phone">Phone</Label>
-                          <Input
-                            id="sub-phone"
-                            value={subordinateFormData.phone}
-                            onChange={(e) =>
-                              setSubordinateFormData({
-                                ...subordinateFormData,
-                                phone: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="sub-password">Password</Label>
-                          <Input
-                            id="sub-password"
-                            type="password"
-                            value={subordinateFormData.password}
-                            onChange={(e) =>
-                              setSubordinateFormData({
-                                ...subordinateFormData,
-                                password: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                        <Button
-                          onClick={
-                            subordinateFormData.parentId === userId
-                              ? handleAddSubordinateTwo
-                              : handleAddSubordinate
-                          }
-                        >
-                          Add Subordinate
-                        </Button>
                       </div>
-                    </div>
-                    {/* Property Section - only shown when dialogType is "both" */}
-                    {dialogType === "both" && (
+                    )}
+
+                    {/* Property Section - only shown when dialogType is "property" or "both" */}
+                    {(dialogType === "property" || dialogType === "both") && (
                       <div>
                         <h3 className="text-lg font-medium mb-2">
                           Add Property
@@ -1454,8 +1514,30 @@ export default function HierarchyPage() {
               </Dialog>
               <Button onClick={exportHierarchyToCSV}>
                 <Download className="h-4 w-4 mr-2" />
-                Export
+                Export Files
               </Button>
+
+              {/* <Button
+                variant="default" // Change to filled variant for visibility
+                onClick={() => {
+                  console.log("Test toast button clicked");
+                  try {
+                    const { id } = toast({
+                      title: "Test Toast",
+                      description:
+                        "This is a test notification to verify toast functionality",
+                      variant: "destructive", // Try the destructive variant to be more visible
+                      duration: 10000, // Extra long duration (10 seconds)
+                      className: "z-[9999]", // Force high z-index
+                    });
+                    console.log("Toast triggered with ID:", id);
+                  } catch (error) {
+                    console.error("Toast error:", error);
+                  }
+                }}
+              >
+                Test Toast
+              </Button> */}
               <Dialog
                 open={isRegisterRenterDialogOpen}
                 onOpenChange={setIsRegisterRenterDialogOpen}
@@ -1538,7 +1620,7 @@ export default function HierarchyPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Subordinate's Properties</CardTitle>
+              <CardTitle>Subdivisions</CardTitle>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -1565,14 +1647,16 @@ export default function HierarchyPage() {
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Edit Subordinate</DialogTitle>
-              <DialogDescription>
-                Update information for {selectedSubordinate?.username}
-              </DialogDescription>
+              <DialogTitle>Edit Subdivision</DialogTitle>
+              <VisuallyHidden>
+                <DialogDescription>
+                  Update information for {selectedSubordinate?.username}
+                </DialogDescription>
+              </VisuallyHidden>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="edit-fullname">Full Name</Label>
+                <Label htmlFor="edit-fullname">Manager Name</Label>
                 <Input
                   id="edit-fullname"
                   value={subordinateFormData.fullName}
@@ -1582,7 +1666,6 @@ export default function HierarchyPage() {
                       fullName: e.target.value,
                     })
                   }
-                  placeholder="Enter full name"
                 />
               </div>
               <div className="grid gap-2">
@@ -1602,7 +1685,6 @@ export default function HierarchyPage() {
                 <Label htmlFor="edit-email">Email</Label>
                 <Input
                   id="edit-email"
-                  type="email"
                   value={subordinateFormData.email}
                   onChange={(e) =>
                     setSubordinateFormData({
@@ -1746,7 +1828,6 @@ export default function HierarchyPage() {
 
               {/* Assign Renter Section */}
               <div>
-                {/* <h3 className="text-lg font-medium mb-2">Assign Renter</h3> */}
                 <div>
                   <Label>Current Renter</Label>
                   <Input
@@ -1755,28 +1836,149 @@ export default function HierarchyPage() {
                     className="mb-2"
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="renter">Select New Renter</Label>
-                  <Select
-                    value={assignRenterData.renterId}
-                    onValueChange={(value) =>
-                      setAssignRenterData({
-                        propertyId: selectedProperty?.propertyId || "",
-                        renterId: value,
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a renter" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {renters.map((renter) => (
-                        <SelectItem key={renter._id} value={renter._id}>
-                          {renter.username}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="renter">Select New Renter</Label>
+                    <Select
+                      value={assignRenterData.renterId}
+                      onValueChange={(value) =>
+                        setAssignRenterData({
+                          ...assignRenterData,
+                          renterId: value,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a renter" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {renters.map((renter) => (
+                          <SelectItem key={renter._id} value={renter._id}>
+                            {renter.username}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Add new fields for start date, end date, and annual increase percentage */}
+                  {/* <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="startDate">Start Date</Label>
+                      <Input
+                        id="startDate"
+                        type="date"
+                        value={assignRenterData.startDate}
+                        onChange={(e) =>
+                          setAssignRenterData({
+                            ...assignRenterData,
+                            startDate: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label htmlFor="endDate">End Date (Optional)</Label>
+                      <Input
+                        id="endDate"
+                        type="date"
+                        value={assignRenterData.endDate}
+                        onChange={(e) =>
+                          setAssignRenterData({
+                            ...assignRenterData,
+                            endDate: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div> */}
+                  {/* Replace the current Start Date input */}
+                  <div>
+                    <Label htmlFor="startDate">Start Date</Label>
+                    <Input
+                      id="startDate"
+                      placeholder="DD/MM/YYYY"
+                      value={startDateDisplay || ""}
+                      onChange={(e) => {
+                        setStartDateDisplay(e.target.value);
+                        // Only convert to backend format if it's a valid date
+                        if (/^\d{2}\/\d{2}\/\d{4}$/.test(e.target.value)) {
+                          const backendDate = parseDateFromDisplay(
+                            e.target.value
+                          );
+                          setAssignRenterData({
+                            ...assignRenterData,
+                            startDate: backendDate,
+                          });
+                        }
+                      }}
+                      onBlur={() => {
+                        // When input loses focus, format the date for display
+                        if (assignRenterData.startDate) {
+                          setStartDateDisplay(
+                            formatDateForDisplay(assignRenterData.startDate)
+                          );
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Replace the current End Date input */}
+                  <div>
+                    <Label htmlFor="endDate">End Date (Optional)</Label>
+                    <Input
+                      id="endDate"
+                      placeholder="DD/MM/YYYY"
+                      value={endDateDisplay || ""}
+                      onChange={(e) => {
+                        setEndDateDisplay(e.target.value);
+                        // Only convert to backend format if it's a valid date
+                        if (/^\d{2}\/\d{2}\/\d{4}$/.test(e.target.value)) {
+                          const backendDate = parseDateFromDisplay(
+                            e.target.value
+                          );
+                          setAssignRenterData({
+                            ...assignRenterData,
+                            endDate: backendDate,
+                          });
+                        }
+                      }}
+                      onBlur={() => {
+                        // When input loses focus, format the date for display
+                        if (assignRenterData.endDate) {
+                          setEndDateDisplay(
+                            formatDateForDisplay(assignRenterData.endDate)
+                          );
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="annualIncrease">
+                      Annual Increase Percentage
+                    </Label>
+                    <Input
+                      id="annualIncrease"
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="0"
+                      value={assignRenterData.annualIncreasePercentage}
+                      onChange={(e) =>
+                        setAssignRenterData({
+                          ...assignRenterData,
+                          annualIncreasePercentage: e.target.value,
+                        })
+                      }
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      The rent will automatically increase by this percentage
+                      each year.
+                    </div>
+                  </div>
+
                   <Button onClick={handleAssignRenter} className="mt-2">
                     Assign Renter
                   </Button>

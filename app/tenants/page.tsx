@@ -3,12 +3,11 @@
 import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
-import { Footer } from "@/components/ui/footer";
-
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
+import { Footer } from "@/components/ui/footer";
 import {
   ChevronDown,
   ChevronUp,
@@ -25,6 +24,7 @@ import {
   Building,
   UserPlus,
   Download,
+  Edit,
 } from "lucide-react";
 import {
   Table,
@@ -123,6 +123,8 @@ interface FilterValue {
 export default function UsersPage() {
   const [renters, setRenters] = useState<Renter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRenter, setSelectedRenter] = useState<Renter | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -149,6 +151,12 @@ export default function UsersPage() {
   const [filters, setFilters] = useState<{
     [key in FilterKey]?: FilterValue[];
   }>({});
+
+  // And rename your other filters state to avoid the conflict:
+  const [filterOptions, setFilterOptions] = useState({
+    hasDues: false,
+    defaulter: false,
+  });
   const [subordinateFilters, setSubordinateFilters] = useState<FilterValue[]>(
     []
   );
@@ -158,6 +166,7 @@ export default function UsersPage() {
     username: "",
     email: "",
     phone: "",
+
     role: "renter",
   });
 
@@ -181,10 +190,9 @@ export default function UsersPage() {
       "Name",
       "Username",
       "Contact No.",
-      "Subordinate",
+      "Subdivision",
       "Properties",
       "Total Due",
-      "Defaulter Status",
     ];
 
     // Create rows
@@ -230,7 +238,7 @@ export default function UsersPage() {
       }
 
       const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/register-renter",
+        "http://localhost:3001/api/users/register-renter",
         {
           method: "POST",
           headers: {
@@ -243,7 +251,12 @@ export default function UsersPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to register renter");
+        throw new Error(errorData.message || "Failed to add renter");
+        toast({
+          title: "Error",
+          description: errorData.message || "Failed to add renter",
+          variant: "destructive",
+        });
       }
 
       const newRenterData = await response.json();
@@ -273,7 +286,7 @@ export default function UsersPage() {
         role: "renter",
       });
 
-      setIsRegisterRenterDialogOpen(false);
+      //   setIsRegisterRenterDialogOpen(false);
 
       // Optionally refresh the full renter list to ensure data consistency
       fetchRenters();
@@ -281,7 +294,7 @@ export default function UsersPage() {
       toast({
         title: "Error",
         description:
-          error instanceof Error ? error.message : "Failed to register renter",
+          error instanceof Error ? error.message : "Failed to add renter",
         variant: "destructive",
       });
     }
@@ -297,12 +310,9 @@ export default function UsersPage() {
       }
 
       setLoading(true);
-      const response = await fetch(
-        "https://renter-app-f0fc.onrender.com/api/users/renters",
-        {
-          headers: { Authorization: `${token}` },
-        }
-      );
+      const response = await fetch("http://localhost:3001/api/users/renters", {
+        headers: { Authorization: `${token}` },
+      });
 
       if (!response.ok) {
         throw new Error("Failed to fetch renters data");
@@ -345,7 +355,11 @@ export default function UsersPage() {
   useEffect(() => {
     fetchRenters();
   }, []);
-
+  const isValidDate = (dateString: string | null | undefined) => {
+    if (!dateString) return false;
+    const date = new Date(dateString);
+    return !isNaN(date.getTime()) && date.getTime() > 0; // Check if date is valid and not Jan 1, 1970
+  };
   const fetchPropertyTimeline = async (
     propertyId: string,
     propertyAddress: string
@@ -360,7 +374,7 @@ export default function UsersPage() {
       }
 
       const response = await fetch(
-        `https://renter-app-f0fc.onrender.com/api/properties/history/${propertyId}`,
+        `http://localhost:3001/api/properties/history/${propertyId}`,
         {
           headers: { Authorization: `${token}` },
         }
@@ -399,7 +413,7 @@ export default function UsersPage() {
       }
 
       const response = await fetch(
-        `https://renter-app-f0fc.onrender.com/api/users/renter/homepage/${renterId}`,
+        `http://localhost:3001/api/users/renter/homepage/${renterId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -410,6 +424,7 @@ export default function UsersPage() {
       }
 
       const data = await response.json();
+      console.log("ddddd", data);
       setRenterPayments(data.payments || []);
     } catch (error) {
       toast({
@@ -441,7 +456,7 @@ export default function UsersPage() {
       const newStatus = !currentStatus;
 
       const response = await fetch(
-        `https://renter-app-f0fc.onrender.com/api/users/update/${renterId}`,
+        `http://localhost:3001/api/users/update/${renterId}`,
         {
           method: "PUT",
           headers: {
@@ -526,17 +541,36 @@ export default function UsersPage() {
   const getSortedAndFilteredRenters = () => {
     // Apply search filter
     let filtered = renters.filter((renter) => {
+      // Search filter logic (existing)
+      // Update this part of your filter function:
+
       const matchesSearch =
-        renter.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        renter.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        renter.phone.includes(searchTerm) ||
+        (renter.username?.toLowerCase() || "").includes(
+          searchTerm.toLowerCase()
+        ) ||
+        (renter.email?.toLowerCase() || "").includes(
+          searchTerm.toLowerCase()
+        ) ||
+        (renter.phone || "").includes(searchTerm) ||
         renter.properties.some((prop) =>
           prop.subordinate?.name
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase())
+            ? prop.subordinate.name
+                .toLowerCase()
+                .includes(searchTerm.toLowerCase())
+            : false
         );
+      // Due amount filter
+      let matchesDueFilter = true;
+      if (filterOptions.hasDues) {
+        matchesDueFilter = getTotalDue(renter) > 0;
+      }
 
-      // Check subordinate filters
+      let matchesDefaulterFilter = true;
+      if (filterOptions.defaulter) {
+        matchesDefaulterFilter = !!renter.defaulter;
+      }
+
+      // Check subordinate filters (existing)
       let matchesSubordinateFilter = true;
       const activeSubordinateFilters = subordinateFilters.filter(
         (f) => f.checked
@@ -552,18 +586,11 @@ export default function UsersPage() {
         );
       }
 
-      // Check defaulter filter
-      let matchesDefaulterFilter = true;
-      const defaulterFilter = filters.defaulter?.find((f) => f.checked);
-      if (defaulterFilter) {
-        matchesDefaulterFilter =
-          defaulterFilter.value === "true"
-            ? !!renter.defaulter
-            : !renter.defaulter;
-      }
-
       return (
-        matchesSearch && matchesSubordinateFilter && matchesDefaulterFilter
+        matchesSearch &&
+        matchesSubordinateFilter &&
+        matchesDueFilter &&
+        matchesDefaulterFilter
       );
     });
 
@@ -625,7 +652,160 @@ export default function UsersPage() {
       )
     );
   };
+  const fetchRenterDetails = async (renterId: string) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found");
+      }
 
+      // Optional: Fetch additional details about the subordinate
+      const response = await fetch(
+        `http://localhost:3001/api/users/user-details/${renterId}`,
+        {
+          headers: {
+            Authorization: `${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        // Log the specific error for debugging
+        console.error(
+          `Failed to fetch user details: ${response.status} ${response.statusText}`
+        );
+        return;
+      }
+
+      const data = await response.json();
+      // Add this inside fetchSubordinateDetails after the data is fetched
+      console.log("renter details from API:", data);
+      // Update form with additional details if available
+      setRenterFormData((prev) => ({
+        ...prev,
+        email: data.email || prev.email,
+        phone: data.phone || prev.phone,
+      }));
+    } catch (error) {
+      // Handle silently - we'll use whatever data we have
+      console.error("Failed to fetch subordinate details:", error);
+    }
+  };
+  const openEditDialog = (renter: Renter, e?: React.MouseEvent) => {
+    // Prevent row click from triggering details dialog if clicked on edit button
+    if (e) {
+      e.stopPropagation();
+    }
+
+    setSelectedRenter(renter);
+
+    // Populate the form with existing data
+    setRenterFormData({
+      username: renter.username || "",
+      email: renter.email || "",
+      phone: renter.phone || "",
+
+      role: "renter", // Assuming all renters have the same role
+    });
+
+    // Fetch additional details to ensure we have the most up-to-date information
+    fetchRenterDetails(renter.renterId);
+
+    // Open the dialog
+    setIsEditDialogOpen(true);
+
+    // Give focus to first field after dialog is visible
+    // setTimeout(() => {
+    //   document.getElementById("edit-fullname")?.focus();
+    // }, 100);
+  };
+  const makeEditable = (inputId: string) => {
+    console.log(`Making ${inputId} editable`);
+    const input = document.getElementById(inputId);
+
+    if (input) {
+      input.removeAttribute("readOnly");
+      input.setAttribute("data-editable", "true");
+      input.style.borderColor = "#2563eb";
+      input.style.boxShadow = "0 0 0 1px #2563eb";
+      input.focus();
+    }
+  };
+  const handleEditSubordinate = async () => {
+    try {
+      if (!selectedRenter) {
+        throw new Error("No subordinate selected");
+      }
+
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found");
+      }
+
+      // Show a loading toast
+      toast({
+        title: "Processing",
+        description: "Updating subordinate information...",
+        variant: "default",
+      });
+
+      // Include all fields in payload, even empty ones
+      // This allows clearing existing values
+      const payload: Record<string, string> = {
+        username: renterFormData.username,
+        email: renterFormData.email,
+        phone: renterFormData.phone,
+      };
+
+      // // Only include password if it's not empty
+      // if (renterFormData.password.trim()) {
+      //   payload.password = renterFormData.password;
+      // }
+
+      // Make API call to update subordinate
+      const response = await fetch(
+        `http://localhost:3001/api/users/update/${selectedRenter.renterId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message ||
+            `Failed to update subordinate: ${response.statusText}`
+        );
+      }
+
+      // Handle successful response
+      toast({
+        title: "Success",
+        description: "Renter updated successfully",
+        variant: "default",
+      });
+
+      // Update UI by refreshing hierarchy data
+      fetchRenters();
+
+      // Close the dialog
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update subordinate",
+        variant: "destructive",
+      });
+    }
+  };
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat("en-US", {
@@ -741,24 +921,69 @@ export default function UsersPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col min-h-[calc(95vh-64px)]">
+      <div className="flex flex-col min-h-[calc(100vh-64px)]">
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">
-                Tenant Management
+                Renter Management
               </h1>
             </div>
             <div className="flex items-center space-x-4">
               <div className="relative w-64">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search users, locations..."
+                  placeholder="Search..."
                   className="pl-8 border-2 border-gray-400 dark:border-gray-500 focus:border-gray-600 dark:focus:border-gray-400"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Filter className="h-4 w-4 mr-2" />
+                    Filters
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56">
+                  <DropdownMenuItem className="font-medium text-sm py-2">
+                    Filter by Status
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCheckboxItem
+                    checked={filterOptions.hasDues}
+                    onCheckedChange={(checked) => {
+                      setFilterOptions((prev) => ({
+                        ...prev,
+                        hasDues: checked,
+                      }));
+                    }}
+                  >
+                    Has Due Amount
+                  </DropdownMenuCheckboxItem>
+                  {/* <DropdownMenuCheckboxItem
+                    checked={filterOptions.defaulter}
+                    onCheckedChange={(checked) => {
+                      setFilterOptions((prev) => ({
+                        ...prev,
+                        defaulter: checked,
+                      }));
+                    }}
+                  >
+                    Defaulters Only
+                  </DropdownMenuCheckboxItem> */}
+
+                  <DropdownMenuItem
+                    onClick={() =>
+                      setFilterOptions({ hasDues: false, defaulter: false })
+                    }
+                    className="text-center text-muted-foreground"
+                  >
+                    Clear filters
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Dialog
                 open={isRegisterRenterDialogOpen}
                 onOpenChange={setIsRegisterRenterDialogOpen}
@@ -766,19 +991,19 @@ export default function UsersPage() {
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
                     <UserPlus className="h-4 w-4 mr-2" />
-                    Register Tenants
+                    Add Renters
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Register New Tenant</DialogTitle>
+                    <DialogTitle>Add New Renter</DialogTitle>
                     {/* <DialogDescription>
                     Add a new renter to the system.
                   </DialogDescription> */}
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                      <Label htmlFor="username">Username</Label>
+                      <Label htmlFor="username">Name</Label>
                       <Input
                         id="username"
                         value={renterFormData.username}
@@ -792,7 +1017,7 @@ export default function UsersPage() {
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="email">Email</Label>
+                      <Label htmlFor="email">Username</Label>
                       <Input
                         id="email"
                         type="email"
@@ -829,14 +1054,14 @@ export default function UsersPage() {
                     >
                       Cancel
                     </Button>
-                    <Button onClick={handleRegisterRenter}>Register</Button>
+                    <Button onClick={handleRegisterRenter}>Add</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
 
               <Button size="sm" onClick={exportToCSV}>
                 <Download className="h-4 w-4 mr-2" />
-                Export Tenants
+                Export Files
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -866,7 +1091,7 @@ export default function UsersPage() {
                     Filter by Status
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuCheckboxItem
+                  {/* <DropdownMenuCheckboxItem
                     checked={
                       filters.defaulter?.find((f) => f.value === "true")
                         ?.checked
@@ -890,8 +1115,8 @@ export default function UsersPage() {
                     }}
                   >
                     Defaulters Only
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
+                  </DropdownMenuCheckboxItem> */}
+                  {/* <DropdownMenuCheckboxItem
                     checked={
                       filters.defaulter?.find((f) => f.value === "false")
                         ?.checked
@@ -915,7 +1140,7 @@ export default function UsersPage() {
                     }}
                   >
                     Non-Defaulters Only
-                  </DropdownMenuCheckboxItem>
+                  </DropdownMenuCheckboxItem> */}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -932,6 +1157,9 @@ export default function UsersPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="cursor-pointer">
+                        <div className="flex items-center">S.No.</div>
+                      </TableHead>
                       <TableHead
                         className="cursor-pointer"
                         onClick={() => handleSort("username")}
@@ -974,7 +1202,7 @@ export default function UsersPage() {
                             ))}
                         </div>
                       </TableHead>
-                      <TableHead>Subordinate</TableHead>
+                      <TableHead>Subdivision</TableHead>
                       <TableHead
                         className="cursor-pointer"
                         onClick={() => handleSort("properties")}
@@ -1003,9 +1231,10 @@ export default function UsersPage() {
                             ))}
                         </div>
                       </TableHead>
-                      <TableHead className="text-right">
+                      {/* <TableHead className="text-right">
                         Defaulter Status
-                      </TableHead>
+                      </TableHead> */}
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
 
@@ -1022,10 +1251,10 @@ export default function UsersPage() {
                           onClick={() => openUserDetails(renter)}
                         >
                           <TableCell className="font-medium">
-                            <div className="flex items-center">
-                              <User className="h-4 w-4 mr-2 text-muted-foreground" />
-                              {renter.username}
-                            </div>
+                            {renters.indexOf(renter) + 1}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {renter.username}
                           </TableCell>
                           <TableCell>{renter.email}</TableCell>
                           <TableCell>{renter.phone}</TableCell>
@@ -1051,7 +1280,16 @@ export default function UsersPage() {
                               ₹{getTotalDue(renter)}
                             </span>
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => openEditDialog(renter, e)}
+                            >
+                              <Edit className="h-4 w-4 mr-1" /> Edit
+                            </Button>
+                          </TableCell>
+                          {/* <TableCell className="text-right">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1097,7 +1335,7 @@ export default function UsersPage() {
                                 </div>
                               )}
                             </Button>
-                          </TableCell>
+                          </TableCell> */}
                         </TableRow>
                       ))
                     ) : (
@@ -1120,11 +1358,11 @@ export default function UsersPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center">
                 User Details
-                {selectedRenter?.defaulter && (
+                {/* {selectedRenter?.defaulter && (
                   <Badge className="ml-2 bg-red-100 text-red-800 border-red-200">
                     Defaulter
                   </Badge>
-                )}
+                )} */}
               </DialogTitle>
             </DialogHeader>
 
@@ -1221,7 +1459,7 @@ export default function UsersPage() {
                                 <TableHead>Current Rent</TableHead>
                                 <TableHead>Assigned From</TableHead>
                                 <TableHead>Due Amount</TableHead>
-                                <TableHead>Subordinate</TableHead>
+                                <TableHead>Subdivision</TableHead>
                                 <TableHead>Property Payment History</TableHead>
                               </TableRow>
                             </TableHeader>
@@ -1398,20 +1636,29 @@ export default function UsersPage() {
                                     }`}
                                   >
                                     <div className="flex items-center">
-                                      <Calendar
-                                        className={`h-4 w-4 mr-2 ${
-                                          payment.status === "success"
-                                            ? "text-green-500"
-                                            : payment.status === "pending"
-                                            ? "text-yellow-500"
-                                            : "text-gray-500"
-                                        }`}
-                                      />
-                                      <span>{formatMonth(payment.month)}</span>
+                                      <span>
+                                        For month: {formatMonth(payment.month)}
+                                      </span>
                                     </div>
+                                    {isValidDate(payment.paymentDate) ? (
+                                      <div className="flex items-center">
+                                        <span>
+                                          Paid:{" "}
+                                          {formatDate(payment.paymentDate)}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center">
+                                        <span className="text-muted-foreground">
+                                          {payment.isPaid === "success"
+                                            ? "Payment Date: "
+                                            : "-"}
+                                        </span>
+                                      </div>
+                                    )}
                                     <div className="flex items-center space-x-4">
                                       <span className="font-medium">
-                                        ₹{payment.amount}
+                                        ₹{payment.finalAmount}
                                       </span>
                                       {getStatusBadge(payment.status)}
                                     </div>
@@ -1439,7 +1686,7 @@ export default function UsersPage() {
                           <div className="mt-8">
                             <div className="flex items-center mb-3">
                               <h3 className="text-lg font-medium">
-                                Detailed History:{" "}
+                                Detailed History:
                                 {selectedPropertyDetails.address}
                               </h3>
                             </div>
@@ -1493,6 +1740,113 @@ export default function UsersPage() {
                 </div>
               </Tabs>
             )}
+          </DialogContent>
+        </Dialog>
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Renter</DialogTitle>
+              <DialogDescription>
+                Update information for {selectedRenter?.username}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-username">Name</Label>
+                <div className="relative">
+                  <Input
+                    id="edit-username"
+                    value={renterFormData.username}
+                    onChange={(e) =>
+                      setRenterFormData({
+                        ...renterFormData,
+                        username: e.target.value,
+                      })
+                    }
+                    className="pr-10"
+                    readOnly={true}
+                    data-editable="false"
+                    onClick={(e) => e.currentTarget.blur()}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => makeEditable("edit-username")}
+                  >
+                    <Edit className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="edit-email">Username</Label>
+                <div className="relative">
+                  <Input
+                    id="edit-email"
+                    value={renterFormData.email}
+                    onChange={(e) =>
+                      setRenterFormData({
+                        ...renterFormData,
+                        email: e.target.value,
+                      })
+                    }
+                    className="pr-10"
+                    readOnly={true}
+                    data-editable="false"
+                    onClick={(e) => e.currentTarget.blur()}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => makeEditable("edit-email")}
+                  >
+                    <Edit className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="edit-phone">Phone</Label>
+                <div className="relative">
+                  <Input
+                    id="edit-phone"
+                    value={renterFormData.phone}
+                    onChange={(e) =>
+                      setRenterFormData({
+                        ...renterFormData,
+                        phone: e.target.value,
+                      })
+                    }
+                    className="pr-10"
+                    readOnly={true}
+                    data-editable="false"
+                    onClick={(e) => e.currentTarget.blur()}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => makeEditable("edit-phone")}
+                  >
+                    <Edit className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleEditSubordinate}>Update</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
         <Footer />
