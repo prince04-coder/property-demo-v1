@@ -21,8 +21,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { Building } from "lucide-react";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("dc_office");
+  const [password, setPassword] = useState("dc_office");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
